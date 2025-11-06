@@ -38,6 +38,18 @@
         let app, auth, db;
         let userId = null;
         let currentCommunity = null;
+        // 角色：管理員、社區經理、社區秘書
+        let currentUserRole = '管理員'; // 預設為管理員以便測試設定頁
+        
+        // 設定頁用的暫存資料 (不更動原本 Firebase 結構)
+        const COMMUNITY_STORE = [
+            { photoUrl: '', code: 'C-001', name: '幸福花園社區', population: 120 },
+            { photoUrl: '', code: 'C-002', name: '勝利一號社區', population: 80 }
+        ];
+        const ACCOUNT_STORE = [
+            { photoUrl: '', role: '管理員', name: '王小明', email: 'admin@example.com', defaultPassword: 'Pass@123', confirmPassword: 'Pass@123', phone: '0912345678' },
+            { photoUrl: '', role: '社區經理', name: '李美麗', email: 'manager@example.com', defaultPassword: 'Pass@456', confirmPassword: 'Pass@456', phone: '0987654321' }
+        ];
         
         // 模擬的社區資料 (實際情況應從 Firestore 讀取)
         const MOCK_COMMUNITIES = [
@@ -98,6 +110,9 @@
 
             // 3. 處理認證狀態
             handleAuthentication();
+
+            // 4. 初始化角色相關的 UI 顯示
+            initRoleBasedUI();
         });
 
         /**
@@ -199,6 +214,43 @@
                     // 重新顯示社區選擇頁面 (我們假定已載入)
                     showView('#community-selection-view');
                 });
+            }
+
+            // 選擇社區頁的頁尾「設定」按鈕
+            const selectionSettingsBtn = document.getElementById('selection-footer-settings');
+            if (selectionSettingsBtn) {
+                selectionSettingsBtn.addEventListener('click', () => {
+                    if (currentUserRole === '管理員') {
+                        showSettingsView();
+                    } else {
+                        alert('僅管理員可進入「設定」頁面');
+                    }
+                });
+            }
+
+            // 設定頁子分頁按鈕與表單
+            const subtabCommunityBtn = document.getElementById('subtab-community-btn');
+            const subtabAccountBtn = document.getElementById('subtab-account-btn');
+            if (subtabCommunityBtn) {
+                subtabCommunityBtn.addEventListener('click', () => {
+                    activateSettingsTab('community');
+                    renderCommunitySettings();
+                });
+            }
+            if (subtabAccountBtn) {
+                subtabAccountBtn.addEventListener('click', () => {
+                    activateSettingsTab('account');
+                    renderAccountSettings();
+                });
+            }
+
+            const addCommunityForm = document.getElementById('add-community-form');
+            if (addCommunityForm) {
+                addCommunityForm.addEventListener('submit', handleAddCommunitySubmit);
+            }
+            const addAccountForm = document.getElementById('add-account-form');
+            if (addAccountForm) {
+                addAccountForm.addEventListener('submit', handleAddAccountSubmit);
             }
         }
 
@@ -324,6 +376,170 @@
         }
 
         /**
+         * 初始化角色相關 UI：非管理員隱藏「設定」入口
+         */
+        function initRoleBasedUI() {
+            const selectionSettingsBtn = document.getElementById('selection-footer-settings');
+            if (selectionSettingsBtn) {
+                if (currentUserRole === '管理員') {
+                    selectionSettingsBtn.classList.remove('hidden');
+                } else {
+                    selectionSettingsBtn.classList.add('hidden');
+                }
+            }
+        }
+
+        /**
+         * 顯示設定頁
+         */
+        function showSettingsView() {
+            showView('#settings-view');
+            // 預設打開「社區設定」子分頁
+            activateSettingsTab('community');
+            renderCommunitySettings();
+        }
+
+        /**
+         * 切換設定子分頁 (community | account)
+         */
+        function activateSettingsTab(tab) {
+            const communityBtn = document.getElementById('subtab-community-btn');
+            const accountBtn = document.getElementById('subtab-account-btn');
+            const communityPane = document.getElementById('community-settings-pane');
+            const accountPane = document.getElementById('account-settings-pane');
+
+            if (!communityBtn || !accountBtn || !communityPane || !accountPane) return;
+
+            if (tab === 'community') {
+                communityBtn.classList.add('text-primary');
+                accountBtn.classList.remove('text-primary');
+                communityPane.classList.remove('hidden');
+                accountPane.classList.add('hidden');
+            } else {
+                accountBtn.classList.add('text-primary');
+                communityBtn.classList.remove('text-primary');
+                accountPane.classList.remove('hidden');
+                communityPane.classList.add('hidden');
+            }
+        }
+
+        /**
+         * 渲染「社區設定」列表
+         */
+        function renderCommunitySettings() {
+            const list = document.getElementById('community-settings-list');
+            if (!list) return;
+            list.innerHTML = '';
+
+            COMMUNITY_STORE.forEach((c, idx) => {
+                const row = document.createElement('div');
+                row.className = 'grid grid-cols-[64px,1fr,2fr,1fr] gap-4 items-center bg-white p-4 rounded-lg shadow-sm';
+                row.innerHTML = `
+                    <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden">${c.photoUrl ? `<img src="${c.photoUrl}" class="w-full h-full object-cover" />` : ''}</div>
+                    <div class="text-gray-700 font-medium">${c.code}</div>
+                    <div class="text-gray-700">${c.name}</div>
+                    <div class="text-gray-700">${c.population}</div>
+                `;
+                list.appendChild(row);
+            });
+        }
+
+        /**
+         * 提交新增社區
+         */
+        function handleAddCommunitySubmit(e) {
+            e.preventDefault();
+            const photoInput = document.getElementById('community-photo');
+            const codeInput = document.getElementById('community-code');
+            const nameInput = document.getElementById('community-name');
+            const populationInput = document.getElementById('community-population');
+
+            const code = codeInput.value.trim();
+            const name = nameInput.value.trim();
+            const population = parseInt(populationInput.value.trim(), 10);
+
+            if (!photoInput.files[0] || !code || !name || Number.isNaN(population)) {
+                alert('請完整填寫社區照片、社區編號、社區名稱、社區人數');
+                return;
+            }
+
+            const photoUrl = URL.createObjectURL(photoInput.files[0]);
+            COMMUNITY_STORE.push({ photoUrl, code, name, population });
+            // 清空表單
+            photoInput.value = '';
+            codeInput.value = '';
+            nameInput.value = '';
+            populationInput.value = '';
+            renderCommunitySettings();
+        }
+
+        /**
+         * 渲染「帳號設定」列表
+         */
+        function renderAccountSettings() {
+            const list = document.getElementById('account-settings-list');
+            if (!list) return;
+            list.innerHTML = '';
+
+            ACCOUNT_STORE.forEach(a => {
+                const row = document.createElement('div');
+                row.className = 'grid grid-cols-[64px,1fr,1fr,2fr,1fr,1fr,2fr] gap-4 items-center bg-white p-4 rounded-lg shadow-sm';
+                row.innerHTML = `
+                    <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden">${a.photoUrl ? `<img src="${a.photoUrl}" class="w-full h-full object-cover" />` : ''}</div>
+                    <div class="text-gray-700">${a.role}</div>
+                    <div class="text-gray-700">${a.name}</div>
+                    <div class="text-gray-700">${a.email}</div>
+                    <div class="text-gray-700">${a.defaultPassword}</div>
+                    <div class="text-gray-700">${a.confirmPassword}</div>
+                    <div class="text-gray-700">${a.phone}</div>
+                `;
+                list.appendChild(row);
+            });
+        }
+
+        /**
+         * 提交新增帳號
+         */
+        function handleAddAccountSubmit(e) {
+            e.preventDefault();
+            const photo = document.getElementById('account-photo');
+            const role = document.getElementById('account-role');
+            const name = document.getElementById('account-name');
+            const email = document.getElementById('account-email');
+            const pass = document.getElementById('account-pass');
+            const pass2 = document.getElementById('account-pass2');
+            const phone = document.getElementById('account-phone');
+
+            if (!photo.files[0] || !role.value || !name.value || !email.value || !pass.value || !pass2.value || !phone.value) {
+                alert('所有欄位皆為必填');
+                return;
+            }
+            if (pass.value !== pass2.value) {
+                alert('預設密碼與再次確認密碼不一致');
+                return;
+            }
+            const photoUrl = URL.createObjectURL(photo.files[0]);
+            ACCOUNT_STORE.push({
+                photoUrl,
+                role: role.value,
+                name: name.value.trim(),
+                email: email.value.trim(),
+                defaultPassword: pass.value,
+                confirmPassword: pass2.value,
+                phone: phone.value.trim()
+            });
+            // 清空表單
+            photo.value = '';
+            role.value = '管理員';
+            name.value = '';
+            email.value = '';
+            pass.value = '';
+            pass2.value = '';
+            phone.value = '';
+            renderAccountSettings();
+        }
+
+        /**
          * 顯示錯誤訊息
          * @param {string} errorElementId 錯誤訊息元素的 ID
          * @param {string} message 要顯示的訊息
@@ -392,6 +608,129 @@
         </div>
     </div>
 
+    <!-- 5. 設定 View -->
+    <div id="settings-view" class="app-view h-dvh w-full hidden flex flex-col bg-gray-100">
+        <!-- 頁首 (10%) -->
+        <header class="h-[10%] bg-primary text-white flex items-center justify-between p-4 shadow-lg z-10 flex-shrink-0">
+            <button class="p-2" onclick="showView('#community-selection-view')">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+            </button>
+            <h1 class="text-xl font-semibold">設定</h1>
+            <div class="w-8"></div>
+        </header>
+
+        <!-- 子分頁列 (10%) -->
+        <div class="h-[10%] bg-white border-b border-gray-200 flex items-center space-x-6 px-4 flex-shrink-0">
+            <button id="subtab-community-btn" class="text-gray-700 font-medium">社區設定</button>
+            <button id="subtab-account-btn" class="text-gray-700 font-medium">帳號設定</button>
+        </div>
+
+        <!-- 內容 (80%) -->
+        <main class="h-[80%] overflow-y-auto p-4 space-y-6">
+            <!-- 社區設定 Pane -->
+            <section id="community-settings-pane" class="space-y-4">
+                <!-- 新增社區表單 -->
+                <div class="bg-white p-4 rounded-xl shadow-md">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">新增社區</h3>
+                    <form id="add-community-form" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-2">社區照片</label>
+                            <input id="community-photo" type="file" accept="image/*" required class="w-full" />
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-2">社區編號</label>
+                            <input id="community-code" type="text" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-2">社區名稱</label>
+                            <input id="community-name" type="text" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-2">社區人數</label>
+                            <input id="community-population" type="number" min="0" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                        </div>
+                        <div class="md:col-span-4">
+                            <button type="submit" class="bg-primary text-white px-4 py-2 rounded-lg">新增社區</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- 社區列表 -->
+                <div class="bg-white p-4 rounded-xl shadow-md">
+                    <div class="grid grid-cols-[64px,1fr,2fr,1fr] gap-4 text-gray-500 text-sm font-medium mb-2">
+                        <div>社區照片</div>
+                        <div>社區編號</div>
+                        <div>社區名稱</div>
+                        <div>社區人數</div>
+                    </div>
+                    <div id="community-settings-list" class="space-y-2"></div>
+                </div>
+            </section>
+
+            <!-- 帳號設定 Pane -->
+            <section id="account-settings-pane" class="space-y-4 hidden">
+                <!-- 新增帳號表單 -->
+                <div class="bg-white p-4 rounded-xl shadow-md">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">新增帳號</h3>
+                    <form id="add-account-form" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-2">帳號照片</label>
+                            <input id="account-photo" type="file" accept="image/*" required class="w-full" />
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-2">角色</label>
+                            <select id="account-role" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                <option>管理員</option>
+                                <option>社區經理</option>
+                                <option>社區秘書</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-2">姓名</label>
+                            <input id="account-name" type="text" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-2">電子郵件 (帳號)</label>
+                            <input id="account-email" type="email" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-2">預設密碼</label>
+                            <input id="account-pass" type="text" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-2">再次確認密碼</label>
+                            <input id="account-pass2" type="text" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-2">手機號碼</label>
+                            <input id="account-phone" type="tel" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                        </div>
+                        <div class="md:col-span-3">
+                            <button type="submit" class="bg-primary text-white px-4 py-2 rounded-lg">新增帳號</button>
+                        </div>
+                    </form>
+                    <p class="text-xs text-gray-500 mt-2">電子郵件與手機號碼皆可作為登入帳號；僅管理員顯示「設定」分頁。</p>
+                </div>
+
+                <!-- 帳號列表 -->
+                <div class="bg-white p-4 rounded-xl shadow-md">
+                    <div class="grid grid-cols-[64px,1fr,1fr,2fr,1fr,1fr,2fr] gap-4 text-gray-500 text-sm font-medium mb-2">
+                        <div>帳號照片</div>
+                        <div>角色</div>
+                        <div>姓名</div>
+                        <div>電子郵件</div>
+                        <div>預設密碼</div>
+                        <div>再次確認密碼</div>
+                        <div>手機號碼</div>
+                    </div>
+                    <div id="account-settings-list" class="space-y-2"></div>
+                </div>
+            </section>
+        </main>
+    </div>
+
     <!-- 2. 登入 View -->
     <div id="login-view" class="app-view h-dvh w-full hidden flex items-center justify-center bg-gray-100 p-4">
         <div class="w-full max-w-sm bg-white p-8 rounded-2xl shadow-xl">
@@ -449,7 +788,7 @@
                 <span class="text-xs font-medium mt-1">社區</span>
             </button>
             <!-- 設定 -->
-            <button class="flex flex-col items-center justify-center text-gray-500 hover:text-primary flex-1 py-2">
+            <button id="selection-footer-settings" class="flex flex-col items-center justify-center text-gray-500 hover:text-primary flex-1 py-2">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <!-- 設定/齒輪 圖標 -->
                     <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
