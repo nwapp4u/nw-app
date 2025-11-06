@@ -28,7 +28,12 @@
             getFirestore, 
             doc, 
             getDoc,
-            setLogLevel
+            setLogLevel,
+            collection,
+            getDocs,
+            addDoc,
+            updateDoc,
+            deleteDoc
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // 啟動 Firebase Debug 模式
@@ -41,15 +46,9 @@
         // 角色：管理員、社區經理、社區秘書
         let currentUserRole = '管理員'; // 預設為管理員以便測試設定頁
         
-        // 設定頁用的暫存資料 (不更動原本 Firebase 結構)
-        const COMMUNITY_STORE = [
-            { photoUrl: '', code: 'C-001', name: '幸福花園社區', population: 120 },
-            { photoUrl: '', code: 'C-002', name: '勝利一號社區', population: 80 }
-        ];
-        const ACCOUNT_STORE = [
-            { photoUrl: '', role: '管理員', name: '王小明', email: 'admin@example.com', defaultPassword: 'Pass@123', confirmPassword: 'Pass@123', phone: '0912345678' },
-            { photoUrl: '', role: '社區經理', name: '李美麗', email: 'manager@example.com', defaultPassword: 'Pass@456', confirmPassword: 'Pass@456', phone: '0987654321' }
-        ];
+        // 設定頁資料來源（將以 Firestore 為主，失敗時可維持空陣列）
+        const COMMUNITY_STORE = [];
+        const ACCOUNT_STORE = [];
         
         // 模擬的社區資料 (實際情況應從 Firestore 讀取)
         const MOCK_COMMUNITIES = [
@@ -389,11 +388,54 @@
             }
         }
 
+        // Firestore 集合路徑（依專案 appId 建立）
+        const COMMUNITIES_COLLECTION_PATH = `/artifacts/${appId}/settings/communities`;
+        const ACCOUNTS_COLLECTION_PATH = `/artifacts/${appId}/settings/accounts`;
+
+        // 載入設定頁資料（社區與帳號）
+        async function loadSettingsData() {
+            try {
+                // 讀取社區
+                const commSnap = await getDocs(collection(db, COMMUNITIES_COLLECTION_PATH));
+                COMMUNITY_STORE.length = 0;
+                commSnap.forEach(docSnap => {
+                    const data = docSnap.data();
+                    COMMUNITY_STORE.push({
+                        __id: docSnap.id,
+                        photoUrl: data.photoUrl || '',
+                        code: data.code || '',
+                        name: data.name || '',
+                        population: data.population || 0
+                    });
+                });
+
+                // 讀取帳號
+                const accSnap = await getDocs(collection(db, ACCOUNTS_COLLECTION_PATH));
+                ACCOUNT_STORE.length = 0;
+                accSnap.forEach(docSnap => {
+                    const data = docSnap.data();
+                    ACCOUNT_STORE.push({
+                        __id: docSnap.id,
+                        photoUrl: data.photoUrl || '',
+                        role: data.role || '',
+                        name: data.name || '',
+                        email: data.email || '',
+                        defaultPassword: data.defaultPassword || '',
+                        confirmPassword: data.confirmPassword || '',
+                        phone: data.phone || ''
+                    });
+                });
+            } catch (err) {
+                console.warn('載入設定資料失敗，改用前端暫存。', err);
+            }
+        }
+
         /**
          * 顯示設定頁
          */
-        function showSettingsView() {
+        async function showSettingsView() {
             showView('#settings-view');
+            await loadSettingsData();
             // 預設打開「社區設定」子分頁
             activateSettingsTab('community');
             renderCommunitySettings();
@@ -433,21 +475,78 @@
 
             COMMUNITY_STORE.forEach((c, idx) => {
                 const row = document.createElement('div');
-                row.className = 'grid grid-cols-[64px,1fr,2fr,1fr] gap-4 items-center bg-white p-4 rounded-lg shadow-sm';
-                row.innerHTML = `
-                    <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden">${c.photoUrl ? `<img src="${c.photoUrl}" class="w-full h-full object-cover" />` : ''}</div>
-                    <div class="text-gray-700 font-medium">${c.code}</div>
-                    <div class="text-gray-700">${c.name}</div>
-                    <div class="text-gray-700">${c.population}</div>
-                `;
+                row.className = 'grid grid-cols-[64px,1fr,2fr,1fr,auto] gap-4 items-center bg-white p-4 rounded-lg shadow-sm';
+                if (c.__editing) {
+                    row.innerHTML = `
+                        <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden">${c.photoUrl ? `<img src="${c.photoUrl}" class="w-full h-full object-cover" />` : ''}</div>
+                        <input class="border rounded px-2 py-1" value="${c.code}" id="edit-code-${idx}" />
+                        <input class="border rounded px-2 py-1" value="${c.name}" id="edit-name-${idx}" />
+                        <input type="number" class="border rounded px-2 py-1" value="${c.population}" id="edit-pop-${idx}" />
+                        <div class="flex gap-2">
+                            <button class="px-3 py-1 bg-primary text-white rounded" id="save-${idx}">儲存</button>
+                            <button class="px-3 py-1 bg-gray-200 text-gray-700 rounded" id="cancel-${idx}">取消</button>
+                        </div>
+                    `;
+                } else {
+                    row.innerHTML = `
+                        <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden">${c.photoUrl ? `<img src="${c.photoUrl}" class="w-full h-full object-cover" />` : ''}</div>
+                        <div class="text-gray-700 font-medium">${c.code}</div>
+                        <div class="text-gray-700">${c.name}</div>
+                        <div class="text-gray-700">${c.population}</div>
+                        <div class="flex gap-2">
+                            <button class="px-3 py-1 bg-primary text-white rounded" id="edit-${idx}">編輯</button>
+                            <button class="px-3 py-1 bg-red-500 text-white rounded" id="del-${idx}">刪除</button>
+                        </div>
+                    `;
+                }
                 list.appendChild(row);
+
+                if (c.__editing) {
+                    const saveBtn = row.querySelector(`#save-${idx}`);
+                    const cancelBtn = row.querySelector(`#cancel-${idx}`);
+                    saveBtn?.addEventListener('click', async () => {
+                        const newCode = row.querySelector(`#edit-code-${idx}`).value.trim();
+                        const newName = row.querySelector(`#edit-name-${idx}`).value.trim();
+                        const newPop = parseInt(row.querySelector(`#edit-pop-${idx}`).value.trim(), 10);
+                        if (!newCode || !newName || Number.isNaN(newPop)) {
+                            alert('請完整填寫社區編號、名稱與人數');
+                            return;
+                        }
+                        try {
+                            if (c.__id) {
+                                await updateDoc(doc(db, COMMUNITIES_COLLECTION_PATH, c.__id), { code: newCode, name: newName, population: newPop });
+                            }
+                            c.code = newCode; c.name = newName; c.population = newPop; c.__editing = false;
+                            renderCommunitySettings();
+                        } catch (err) {
+                            console.error('更新社區失敗', err);
+                            alert('更新失敗');
+                        }
+                    });
+                    cancelBtn?.addEventListener('click', () => { c.__editing = false; renderCommunitySettings(); });
+                } else {
+                    const editBtn = row.querySelector(`#edit-${idx}`);
+                    const delBtn = row.querySelector(`#del-${idx}`);
+                    editBtn?.addEventListener('click', () => { c.__editing = true; renderCommunitySettings(); });
+                    delBtn?.addEventListener('click', async () => {
+                        if (!confirm('確定要刪除這個社區？此操作將移除 Firebase 內資料。')) return;
+                        try {
+                            if (c.__id) { await deleteDoc(doc(db, COMMUNITIES_COLLECTION_PATH, c.__id)); }
+                            COMMUNITY_STORE.splice(idx, 1);
+                            renderCommunitySettings();
+                        } catch (err) {
+                            console.error('刪除社區失敗', err);
+                            alert('刪除失敗');
+                        }
+                    });
+                }
             });
         }
 
         /**
          * 提交新增社區
          */
-        function handleAddCommunitySubmit(e) {
+        async function handleAddCommunitySubmit(e) {
             e.preventDefault();
             const photoInput = document.getElementById('community-photo');
             const codeInput = document.getElementById('community-code');
@@ -464,13 +563,19 @@
             }
 
             const photoUrl = URL.createObjectURL(photoInput.files[0]);
-            COMMUNITY_STORE.push({ photoUrl, code, name, population });
-            // 清空表單
-            photoInput.value = '';
-            codeInput.value = '';
-            nameInput.value = '';
-            populationInput.value = '';
-            renderCommunitySettings();
+            try {
+                const docRef = await addDoc(collection(db, COMMUNITIES_COLLECTION_PATH), { photoUrl, code, name, population, createdAt: Date.now() });
+                COMMUNITY_STORE.push({ __id: docRef.id, photoUrl, code, name, population });
+                // 清空表單
+                photoInput.value = '';
+                codeInput.value = '';
+                nameInput.value = '';
+                populationInput.value = '';
+                renderCommunitySettings();
+            } catch (err) {
+                console.error('新增社區失敗', err);
+                alert('新增失敗');
+            }
         }
 
         /**
@@ -481,26 +586,81 @@
             if (!list) return;
             list.innerHTML = '';
 
-            ACCOUNT_STORE.forEach(a => {
+            ACCOUNT_STORE.forEach((a, idx) => {
                 const row = document.createElement('div');
-                row.className = 'grid grid-cols-[64px,1fr,1fr,2fr,1fr,1fr,2fr] gap-4 items-center bg-white p-4 rounded-lg shadow-sm';
-                row.innerHTML = `
-                    <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden">${a.photoUrl ? `<img src="${a.photoUrl}" class="w-full h-full object-cover" />` : ''}</div>
-                    <div class="text-gray-700">${a.role}</div>
-                    <div class="text-gray-700">${a.name}</div>
-                    <div class="text-gray-700">${a.email}</div>
-                    <div class="text-gray-700">${a.defaultPassword}</div>
-                    <div class="text-gray-700">${a.confirmPassword}</div>
-                    <div class="text-gray-700">${a.phone}</div>
-                `;
+                row.className = 'grid grid-cols-[64px,1fr,1fr,2fr,1fr,1fr,2fr,auto] gap-4 items-center bg-white p-4 rounded-lg shadow-sm';
+                if (a.__editing) {
+                    row.innerHTML = `
+                        <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden">${a.photoUrl ? `<img src="${a.photoUrl}" class="w-full h-full object-cover" />` : ''}</div>
+                        <input class="border rounded px-2 py-1" value="${a.role}" id="edit-role-${idx}" />
+                        <input class="border rounded px-2 py-1" value="${a.name}" id="edit-name-${idx}" />
+                        <input class="border rounded px-2 py-1" value="${a.email}" id="edit-email-${idx}" />
+                        <input class="border rounded px-2 py-1" value="${a.defaultPassword}" id="edit-def-${idx}" />
+                        <input class="border rounded px-2 py-1" value="${a.confirmPassword}" id="edit-con-${idx}" />
+                        <input class="border rounded px-2 py-1" value="${a.phone}" id="edit-phone-${idx}" />
+                        <div class="flex gap-2">
+                            <button class="px-3 py-1 bg-primary text-white rounded" id="save-${idx}">儲存</button>
+                            <button class="px-3 py-1 bg-gray-200 text-gray-700 rounded" id="cancel-${idx}">取消</button>
+                        </div>
+                    `;
+                } else {
+                    row.innerHTML = `
+                        <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden">${a.photoUrl ? `<img src="${a.photoUrl}" class="w-full h-full object-cover" />` : ''}</div>
+                        <div class="text-gray-700">${a.role}</div>
+                        <div class="text-gray-700">${a.name}</div>
+                        <div class="text-gray-700">${a.email}</div>
+                        <div class="text-gray-700">${a.defaultPassword}</div>
+                        <div class="text-gray-700">${a.confirmPassword}</div>
+                        <div class="text-gray-700">${a.phone}</div>
+                        <div class="flex gap-2">
+                            <button class="px-3 py-1 bg-primary text-white rounded" id="edit-${idx}">編輯</button>
+                            <button class="px-3 py-1 bg-red-500 text-white rounded" id="del-${idx}">刪除</button>
+                        </div>
+                    `;
+                }
                 list.appendChild(row);
+
+                if (a.__editing) {
+                    const saveBtn = row.querySelector(`#save-${idx}`);
+                    const cancelBtn = row.querySelector(`#cancel-${idx}`);
+                    saveBtn?.addEventListener('click', async () => {
+                        const role = row.querySelector(`#edit-role-${idx}`).value.trim();
+                        const name = row.querySelector(`#edit-name-${idx}`).value.trim();
+                        const email = row.querySelector(`#edit-email-${idx}`).value.trim();
+                        const def = row.querySelector(`#edit-def-${idx}`).value.trim();
+                        const con = row.querySelector(`#edit-con-${idx}`).value.trim();
+                        const phone = row.querySelector(`#edit-phone-${idx}`).value.trim();
+                        if (!role || !name || !email || !def || !con || !phone) { alert('所有欄位皆為必填'); return; }
+                        try {
+                            if (a.__id) {
+                                await updateDoc(doc(db, ACCOUNTS_COLLECTION_PATH, a.__id), { role, name, email, defaultPassword: def, confirmPassword: con, phone });
+                            }
+                            a.role = role; a.name = name; a.email = email; a.defaultPassword = def; a.confirmPassword = con; a.phone = phone;
+                            a.__editing = false;
+                            renderAccountSettings();
+                        } catch (err) { console.error('更新帳號失敗', err); alert('更新失敗'); }
+                    });
+                    cancelBtn?.addEventListener('click', () => { a.__editing = false; renderAccountSettings(); });
+                } else {
+                    const editBtn = row.querySelector(`#edit-${idx}`);
+                    const delBtn = row.querySelector(`#del-${idx}`);
+                    editBtn?.addEventListener('click', () => { a.__editing = true; renderAccountSettings(); });
+                    delBtn?.addEventListener('click', async () => {
+                        if (!confirm('確定要刪除這個帳號？此操作將移除 Firebase 內資料。')) return;
+                        try {
+                            if (a.__id) { await deleteDoc(doc(db, ACCOUNTS_COLLECTION_PATH, a.__id)); }
+                            ACCOUNT_STORE.splice(idx, 1);
+                            renderAccountSettings();
+                        } catch (err) { console.error('刪除帳號失敗', err); alert('刪除失敗'); }
+                    });
+                }
             });
         }
 
         /**
          * 提交新增帳號
          */
-        function handleAddAccountSubmit(e) {
+        async function handleAddAccountSubmit(e) {
             e.preventDefault();
             const photo = document.getElementById('account-photo');
             const role = document.getElementById('account-role');
@@ -519,24 +679,31 @@
                 return;
             }
             const photoUrl = URL.createObjectURL(photo.files[0]);
-            ACCOUNT_STORE.push({
-                photoUrl,
-                role: role.value,
-                name: name.value.trim(),
-                email: email.value.trim(),
-                defaultPassword: pass.value,
-                confirmPassword: pass2.value,
-                phone: phone.value.trim()
-            });
-            // 清空表單
-            photo.value = '';
-            role.value = '管理員';
-            name.value = '';
-            email.value = '';
-            pass.value = '';
-            pass2.value = '';
-            phone.value = '';
-            renderAccountSettings();
+            try {
+                const docRef = await addDoc(collection(db, ACCOUNTS_COLLECTION_PATH), {
+                    photoUrl,
+                    role: role.value,
+                    name: name.value.trim(),
+                    email: email.value.trim(),
+                    defaultPassword: pass.value,
+                    confirmPassword: pass2.value,
+                    phone: phone.value.trim(),
+                    createdAt: Date.now()
+                });
+                ACCOUNT_STORE.push({ __id: docRef.id, photoUrl, role: role.value, name: name.value.trim(), email: email.value.trim(), defaultPassword: pass.value, confirmPassword: pass2.value, phone: phone.value.trim() });
+                // 清空表單
+                photo.value = '';
+                role.value = '管理員';
+                name.value = '';
+                email.value = '';
+                pass.value = '';
+                pass2.value = '';
+                phone.value = '';
+                renderAccountSettings();
+            } catch (err) {
+                console.error('新增帳號失敗', err);
+                alert('新增失敗');
+            }
         }
 
         /**
@@ -589,9 +756,28 @@
             height: 100vh; /* 備用 */
             height: 100dvh; /* 動態視窗高度 */
         }
+        /* 設定頁橫向捲動容器（行動版寬度過小時） */
+        .settings-scroll-container { overflow-x: auto; }
+        /* 行動裝置橫向時，仍以直屏方式顯示（旋轉容器） */
+        @media (orientation: landscape) and (max-width: 1024px) {
+            #app-root {
+                width: 100vh;
+                height: 100vw;
+                transform: rotate(90deg);
+                transform-origin: center center;
+                position: fixed;
+                top: 0;
+                left: 0;
+                overflow: hidden;
+                background: inherit;
+            }
+            body { overflow: hidden; }
+        }
     </style>
 </head>
 <body class="bg-gray-100 antialiased">
+
+    <div id="app-root">
 
     <!-- 
       APP 容器：
@@ -658,14 +844,17 @@
                 </div>
 
                 <!-- 社區列表 -->
-                <div class="bg-white p-4 rounded-xl shadow-md">
-                    <div class="grid grid-cols-[64px,1fr,2fr,1fr] gap-4 text-gray-500 text-sm font-medium mb-2">
-                        <div>社區照片</div>
-                        <div>社區編號</div>
-                        <div>社區名稱</div>
-                        <div>社區人數</div>
+                <div class="bg-white p-4 rounded-xl shadow-md settings-scroll-container overflow-x-auto">
+                    <div class="min-w-[900px]">
+                        <div class="grid grid-cols-[64px,1fr,2fr,1fr,auto] gap-4 text-gray-500 text-sm font-medium mb-2">
+                            <div>社區照片</div>
+                            <div>社區編號</div>
+                            <div>社區名稱</div>
+                            <div>社區人數</div>
+                            <div>操作</div>
+                        </div>
+                        <div id="community-settings-list" class="space-y-2"></div>
                     </div>
-                    <div id="community-settings-list" class="space-y-2"></div>
                 </div>
             </section>
 
@@ -715,17 +904,20 @@
                 </div>
 
                 <!-- 帳號列表 -->
-                <div class="bg-white p-4 rounded-xl shadow-md">
-                    <div class="grid grid-cols-[64px,1fr,1fr,2fr,1fr,1fr,2fr] gap-4 text-gray-500 text-sm font-medium mb-2">
-                        <div>帳號照片</div>
-                        <div>角色</div>
-                        <div>姓名</div>
-                        <div>電子郵件</div>
-                        <div>預設密碼</div>
-                        <div>再次確認密碼</div>
-                        <div>手機號碼</div>
+                <div class="bg-white p-4 rounded-xl shadow-md settings-scroll-container overflow-x-auto">
+                    <div class="min-w-[1100px]">
+                        <div class="grid grid-cols-[64px,1fr,1fr,2fr,1fr,1fr,2fr,auto] gap-4 text-gray-500 text-sm font-medium mb-2">
+                            <div>帳號照片</div>
+                            <div>角色</div>
+                            <div>姓名</div>
+                            <div>電子郵件</div>
+                            <div>預設密碼</div>
+                            <div>再次確認密碼</div>
+                            <div>手機號碼</div>
+                            <div>操作</div>
+                        </div>
+                        <div id="account-settings-list" class="space-y-2"></div>
                     </div>
-                    <div id="account-settings-list" class="space-y-2"></div>
                 </div>
             </section>
         </main>
