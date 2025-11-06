@@ -388,15 +388,25 @@
             }
         }
 
-        // Firestore 集合路徑（依專案 appId 建立）
-        const COMMUNITIES_COLLECTION_PATH = `/artifacts/${appId}/settings/communities`;
-        const ACCOUNTS_COLLECTION_PATH = `/artifacts/${appId}/settings/accounts`;
+        // Firestore 集合參考（移除前導斜線，改用段落以避免路徑錯誤）
+        function communitiesCollection() {
+            return collection(db, 'artifacts', appId, 'settings', 'communities');
+        }
+        function accountsCollection() {
+            return collection(db, 'artifacts', appId, 'settings', 'accounts');
+        }
+        function communityDoc(id) {
+            return doc(db, 'artifacts', appId, 'settings', 'communities', id);
+        }
+        function accountDoc(id) {
+            return doc(db, 'artifacts', appId, 'settings', 'accounts', id);
+        }
 
         // 載入設定頁資料（社區與帳號）
         async function loadSettingsData() {
             try {
                 // 讀取社區
-                const commSnap = await getDocs(collection(db, COMMUNITIES_COLLECTION_PATH));
+                const commSnap = await getDocs(communitiesCollection());
                 COMMUNITY_STORE.length = 0;
                 commSnap.forEach(docSnap => {
                     const data = docSnap.data();
@@ -410,7 +420,7 @@
                 });
 
                 // 讀取帳號
-                const accSnap = await getDocs(collection(db, ACCOUNTS_COLLECTION_PATH));
+                const accSnap = await getDocs(accountsCollection());
                 ACCOUNT_STORE.length = 0;
                 accSnap.forEach(docSnap => {
                     const data = docSnap.data();
@@ -514,7 +524,7 @@
                         }
                         try {
                             if (c.__id) {
-                                await updateDoc(doc(db, COMMUNITIES_COLLECTION_PATH, c.__id), { code: newCode, name: newName, population: newPop });
+                                await updateDoc(communityDoc(c.__id), { code: newCode, name: newName, population: newPop });
                             }
                             c.code = newCode; c.name = newName; c.population = newPop; c.__editing = false;
                             renderCommunitySettings();
@@ -531,7 +541,7 @@
                     delBtn?.addEventListener('click', async () => {
                         if (!confirm('確定要刪除這個社區？此操作將移除 Firebase 內資料。')) return;
                         try {
-                            if (c.__id) { await deleteDoc(doc(db, COMMUNITIES_COLLECTION_PATH, c.__id)); }
+                            if (c.__id) { await deleteDoc(communityDoc(c.__id)); }
                             COMMUNITY_STORE.splice(idx, 1);
                             renderCommunitySettings();
                         } catch (err) {
@@ -564,7 +574,7 @@
 
             const photoUrl = URL.createObjectURL(photoInput.files[0]);
             try {
-                const docRef = await addDoc(collection(db, COMMUNITIES_COLLECTION_PATH), { photoUrl, code, name, population, createdAt: Date.now() });
+                const docRef = await addDoc(communitiesCollection(), { photoUrl, code, name, population, createdAt: Date.now() });
                 COMMUNITY_STORE.push({ __id: docRef.id, photoUrl, code, name, population });
                 // 清空表單
                 photoInput.value = '';
@@ -633,7 +643,7 @@
                         if (!role || !name || !email || !def || !con || !phone) { alert('所有欄位皆為必填'); return; }
                         try {
                             if (a.__id) {
-                                await updateDoc(doc(db, ACCOUNTS_COLLECTION_PATH, a.__id), { role, name, email, defaultPassword: def, confirmPassword: con, phone });
+                                await updateDoc(accountDoc(a.__id), { role, name, email, defaultPassword: def, confirmPassword: con, phone });
                             }
                             a.role = role; a.name = name; a.email = email; a.defaultPassword = def; a.confirmPassword = con; a.phone = phone;
                             a.__editing = false;
@@ -648,7 +658,7 @@
                     delBtn?.addEventListener('click', async () => {
                         if (!confirm('確定要刪除這個帳號？此操作將移除 Firebase 內資料。')) return;
                         try {
-                            if (a.__id) { await deleteDoc(doc(db, ACCOUNTS_COLLECTION_PATH, a.__id)); }
+                            if (a.__id) { await deleteDoc(accountDoc(a.__id)); }
                             ACCOUNT_STORE.splice(idx, 1);
                             renderAccountSettings();
                         } catch (err) { console.error('刪除帳號失敗', err); alert('刪除失敗'); }
@@ -680,7 +690,7 @@
             }
             const photoUrl = URL.createObjectURL(photo.files[0]);
             try {
-                const docRef = await addDoc(collection(db, ACCOUNTS_COLLECTION_PATH), {
+                const docRef = await addDoc(accountsCollection(), {
                     photoUrl,
                     role: role.value,
                     name: name.value.trim(),
@@ -758,24 +768,25 @@
         }
         /* 設定頁橫向捲動容器（行動版寬度過小時） */
         .settings-scroll-container { overflow-x: auto; }
-        /* 行動裝置橫向時，仍以直屏方式顯示（旋轉容器） */
+        /* 橫向時顯示提示覆蓋層，要求直屏使用 */
+        #orientation-overlay { display: none; }
         @media (orientation: landscape) and (max-width: 1024px) {
-            #app-root {
-                width: 100vh;
-                height: 100vw;
-                transform: rotate(90deg);
-                transform-origin: center center;
-                position: fixed;
-                top: 0;
-                left: 0;
-                overflow: hidden;
-                background: inherit;
-            }
-            body { overflow: hidden; }
+            #orientation-overlay { display: flex; }
         }
     </style>
 </head>
 <body class="bg-gray-100 antialiased">
+
+    <!-- 直屏提示覆蓋層 -->
+    <div id="orientation-overlay" class="fixed inset-0 z-50 bg-white/95 backdrop-blur-sm items-center justify-center text-center">
+        <div class="p-6">
+            <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-primary text-white flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v8m4-4H8"/></svg>
+            </div>
+            <p class="text-gray-800 font-semibold">請以直屏使用本應用</p>
+            <p class="text-gray-500 text-sm mt-1">為確保最佳體驗，請將手機轉回直立方向。</p>
+        </div>
+    </div>
 
     <div id="app-root">
 
