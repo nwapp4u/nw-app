@@ -22,7 +22,8 @@
             signOut,
             signInWithCustomToken,
             setPersistence,
-            inMemoryPersistence
+            inMemoryPersistence,
+            browserLocalPersistence
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, 
@@ -166,6 +167,13 @@
                     loginError.classList.add('hidden');
 
                     try {
+                        // 記住我：切換持久化模式
+                        const rememberMe = document.getElementById('remember-me');
+                        if (rememberMe && rememberMe.checked) {
+                            await setPersistence(auth, browserLocalPersistence);
+                        } else {
+                            await setPersistence(auth, inMemoryPersistence);
+                        }
                         // ** 實際登入 **
                         await signInWithEmailAndPassword(auth, email, password);
                         // onAuthStateChanged 會自動處理後續流程
@@ -185,6 +193,17 @@
                         loginButton.disabled = false;
                         loginButton.innerText = '登入';
                     }
+                });
+            }
+
+            // 切換密碼顯示
+            const togglePasswordBtn = document.getElementById('toggle-password');
+            const passwordInput = document.getElementById('password');
+            if (togglePasswordBtn && passwordInput) {
+                togglePasswordBtn.addEventListener('click', () => {
+                    const isHidden = passwordInput.type === 'password';
+                    passwordInput.type = isHidden ? 'text' : 'password';
+                    togglePasswordBtn.innerText = isHidden ? '隱藏密碼' : '顯示密碼';
                 });
             }
 
@@ -527,7 +546,10 @@
                 row.className = 'grid grid-cols-[64px,1fr,2fr,1fr,auto] gap-4 items-center bg-white p-4 rounded-lg shadow-sm';
                 if (c.__editing) {
                     row.innerHTML = `
-                        <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden">${c.photoUrl ? `<img src="${c.photoUrl}" class="w-full h-full object-cover" />` : ''}</div>
+                        <div class="flex flex-col items-center gap-1">
+                            <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden" id="edit-photo-preview-${idx}">${c.photoUrl ? `<img src="${c.photoUrl}" class="w-full h-full object-cover" />` : ''}</div>
+                            <input type="file" accept="image/*" id="edit-photo-${idx}" class="text-xs" />
+                        </div>
                         <input class="border rounded px-2 py-1" value="${c.code}" id="edit-code-${idx}" />
                         <input class="border rounded px-2 py-1" value="${c.name}" id="edit-name-${idx}" />
                         <input type="number" class="border rounded px-2 py-1" value="${c.population}" id="edit-pop-${idx}" />
@@ -553,6 +575,16 @@
                 if (c.__editing) {
                     const saveBtn = row.querySelector(`#save-${idx}`);
                     const cancelBtn = row.querySelector(`#cancel-${idx}`);
+                    const photoInput = row.querySelector(`#edit-photo-${idx}`);
+                    const photoPreview = row.querySelector(`#edit-photo-preview-${idx}`);
+                    photoInput?.addEventListener('change', () => {
+                        const file = photoInput.files?.[0];
+                        if (file) {
+                            const url = URL.createObjectURL(file);
+                            c.__tempPhotoUrl = url;
+                            photoPreview.innerHTML = `<img src="${url}" class="w-full h-full object-cover" />`;
+                        }
+                    });
                     saveBtn?.addEventListener('click', async () => {
                         const newCode = row.querySelector(`#edit-code-${idx}`).value.trim();
                         const newName = row.querySelector(`#edit-name-${idx}`).value.trim();
@@ -562,9 +594,12 @@
                             return;
                         }
                         try {
+                            const photoToSave = c.__tempPhotoUrl ? c.__tempPhotoUrl : c.photoUrl;
                             if (c.__id) {
-                                await updateDoc(communityDoc(c.__id), { code: newCode, name: newName, population: newPop });
+                                await updateDoc(communityDoc(c.__id), { photoUrl: photoToSave, code: newCode, name: newName, population: newPop });
                             }
+                            c.photoUrl = photoToSave;
+                            delete c.__tempPhotoUrl;
                             c.code = newCode; c.name = newName; c.population = newPop; c.__editing = false;
                             renderCommunitySettings();
                         } catch (err) {
@@ -572,7 +607,7 @@
                             alert('更新失敗');
                         }
                     });
-                    cancelBtn?.addEventListener('click', () => { c.__editing = false; renderCommunitySettings(); });
+                    cancelBtn?.addEventListener('click', () => { delete c.__tempPhotoUrl; c.__editing = false; renderCommunitySettings(); });
                 } else {
                     const editBtn = row.querySelector(`#edit-${idx}`);
                     const delBtn = row.querySelector(`#del-${idx}`);
@@ -640,7 +675,10 @@
                 row.className = 'grid grid-cols-[64px,1fr,1fr,2fr,1fr,1fr,2fr,auto] gap-4 items-center bg-white p-4 rounded-lg shadow-sm';
                 if (a.__editing) {
                     row.innerHTML = `
-                        <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden">${a.photoUrl ? `<img src="${a.photoUrl}" class="w-full h-full object-cover" />` : ''}</div>
+                        <div class="flex flex-col items-center gap-1">
+                            <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden" id="edit-account-photo-preview-${idx}">${a.photoUrl ? `<img src="${a.photoUrl}" class="w-full h-full object-cover" />` : ''}</div>
+                            <input type="file" accept="image/*" id="edit-account-photo-${idx}" class="text-xs" />
+                        </div>
                         <input class="border rounded px-2 py-1" value="${a.role}" id="edit-role-${idx}" />
                         <input class="border rounded px-2 py-1" value="${a.name}" id="edit-name-${idx}" />
                         <input class="border rounded px-2 py-1" value="${a.email}" id="edit-email-${idx}" />
@@ -672,6 +710,16 @@
                 if (a.__editing) {
                     const saveBtn = row.querySelector(`#save-${idx}`);
                     const cancelBtn = row.querySelector(`#cancel-${idx}`);
+                    const photoInput = row.querySelector(`#edit-account-photo-${idx}`);
+                    const photoPreview = row.querySelector(`#edit-account-photo-preview-${idx}`);
+                    photoInput?.addEventListener('change', () => {
+                        const file = photoInput.files?.[0];
+                        if (file) {
+                            const url = URL.createObjectURL(file);
+                            a.__tempPhotoUrl = url;
+                            photoPreview.innerHTML = `<img src="${url}" class="w-full h-full object-cover" />`;
+                        }
+                    });
                     saveBtn?.addEventListener('click', async () => {
                         const role = row.querySelector(`#edit-role-${idx}`).value.trim();
                         const name = row.querySelector(`#edit-name-${idx}`).value.trim();
@@ -682,14 +730,18 @@
                         if (!role || !name || !email || !def || !con || !phone) { alert('所有欄位皆為必填'); return; }
                         try {
                             if (a.__id) {
-                                await updateDoc(accountDoc(a.__id), { role, name, email, defaultPassword: def, confirmPassword: con, phone });
+                                const photoToSave = a.__tempPhotoUrl ? a.__tempPhotoUrl : a.photoUrl;
+                                await updateDoc(accountDoc(a.__id), { photoUrl: photoToSave, role, name, email, defaultPassword: def, confirmPassword: con, phone });
                             }
+                            const photoToSaveLocal = a.__tempPhotoUrl ? a.__tempPhotoUrl : a.photoUrl;
+                            a.photoUrl = photoToSaveLocal;
+                            delete a.__tempPhotoUrl;
                             a.role = role; a.name = name; a.email = email; a.defaultPassword = def; a.confirmPassword = con; a.phone = phone;
                             a.__editing = false;
                             renderAccountSettings();
                         } catch (err) { console.error('更新帳號失敗', err); alert('更新失敗'); }
                     });
-                    cancelBtn?.addEventListener('click', () => { a.__editing = false; renderAccountSettings(); });
+                    cancelBtn?.addEventListener('click', () => { delete a.__tempPhotoUrl; a.__editing = false; renderAccountSettings(); });
                 } else {
                     const editBtn = row.querySelector(`#edit-${idx}`);
                     const delBtn = row.querySelector(`#del-${idx}`);
@@ -999,6 +1051,13 @@
                 <div class="mb-6">
                     <label for="password" class="block mb-2 text-sm font-medium text-gray-600">密碼</label>
                     <input type="password" id="password" value="660217" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="••••••••" required>
+                </div>
+                <div class="flex items-center justify-between mb-4">
+                    <label class="inline-flex items-center text-sm text-gray-600">
+                        <input id="remember-me" type="checkbox" class="mr-2">
+                        記住我
+                    </label>
+                    <button type="button" id="toggle-password" class="text-sm text-primary">顯示密碼</button>
                 </div>
                 
                 <!-- 錯誤訊息 -->
