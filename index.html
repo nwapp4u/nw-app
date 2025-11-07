@@ -429,12 +429,14 @@
 
             // 設置頁面標題
             document.getElementById('community-page-title').innerText = community.name;
-            
-            // TODO: 根據 community.id 載入該社區的特定自訂內容
-            // (例如：頁中A的公告、頁中B的功能按鈕等)
-            // 這裡我們先填入一些佔位符
-            document.getElementById('section-A-content').innerText = `${community.name} 的最新公告`;
-            document.getElementById('section-B-content').innerText = `這裡是 ${community.name} 的主要功能區塊`;
+
+            // 示意：跑馬燈與廣告占位
+            const marquee = document.getElementById('marquee-text');
+            if (marquee) marquee.textContent = `${community.name} 最新公告：歡迎加入本社區！`;
+            const adA = document.getElementById('ad-a-img');
+            if (adA) adA.src = 'https://via.placeholder.com/1000x300?text=' + encodeURIComponent(community.name + ' 廣告A');
+            const adB = document.getElementById('ad-b-img');
+            if (adB) adB.src = 'https://via.placeholder.com/1000x200?text=' + encodeURIComponent(community.name + ' 廣告B');
             
             // 顯示社區主頁
             showView('#community-page-view');
@@ -1204,73 +1206,74 @@
         使用 flex-col 搭配 h-dvh 確保佔滿全螢幕
         並使用 h-[xx%] 來精確分配 10/10/30/20/20/10 的高度
     -->
-    <div id="community-page-view" class="app-view h-dvh w-full hidden flex flex-col bg-white">
-
-        <!-- 頁首 (10%) -->
-        <header class="h-[10%] bg-primary text-white flex items-center justify-between p-4 shadow-lg z-10 flex-shrink-0">
+    <div id="community-page-view" class="app-view w-full hidden bg-white">
+        <!-- 固定頁首 8%：黑字紅底、置最上層 -->
+        <header class="fixed top-0 left-0 right-0 h-[8vh] bg-red-600 text-black flex items-center justify-between px-4 shadow-lg z-50">
             <button id="back-to-selection" class="p-2">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
             </button>
             <h1 id="community-page-title" class="text-xl font-semibold">社區名稱</h1>
-            <div class="w-8"></div> <!-- 佔位符，保持標題置中 -->
+            <div class="w-8"></div>
         </header>
 
-        <!-- 頁中A (10%) - 例如：公告輪播 -->
-        <section class="h-[10%] bg-gray-100 flex items-center justify-center p-4 border-b border-gray-200 flex-shrink-0">
-            <div id="section-A-content" class="text-gray-700 font-medium">
-                [頁中 A - 10%] 這裡是公告內容
-            </div>
-        </section>
-
-        <!-- 
-          主要內容區域
-          使用 overflow-y-auto 允許中間 3 個區塊在內容過多時滾動
-          注意：為了讓 30/20/20 比例在滾動區內生效，我們需要一個 70% 的外容器
-          或者... 為了簡單，我們先讓 30/20/20 區塊各自固定，
-          並在 *內部* 實現滾動 (如果需要的話)
-        -->
-        
-        <!-- 頁中B (30%) - 例如：主要功能網格 -->
-        <section class="h-[30%] bg-white p-4 overflow-y-auto border-b border-gray-200 flex-shrink-0">
-            <h3 class="text-lg font-semibold text-gray-800 mb-3">[頁中 B - 30%] 主要功能</h3>
-            <div id="section-B-content" class="grid grid-cols-3 gap-4 text-center">
-                <!-- 範例功能按鈕 -->
-                <div class="bg-primary/10 p-4 rounded-lg">
-                    <div class="w-12 h-12 bg-primary text-white rounded-full flex items-center justify-center mx-auto mb-2">?</div>
-                    <span class="text-sm font-medium text-gray-700">功能一</span>
+        <!-- 內容容器：扣除上下 8% 高度，按需求分段 -->
+        <main class="pt-[8vh] pb-[8vh] h-[100vh] overflow-y-auto flex flex-col">
+            <!-- 跑馬燈 4%：黑字白底 -->
+            <section class="h-[4vh] bg-white text-black flex items-center px-4 border-b border-gray-200">
+                <div id="marquee-text" class="whitespace-nowrap overflow-hidden">
+                    跑馬燈訊息...
                 </div>
-                <div class="bg-primary/10 p-4 rounded-lg">
-                    <div class="w-12 h-12 bg-primary text-white rounded-full flex items-center justify-center mx-auto mb-2">?</div>
-                    <span class="text-sm font-medium text-gray-700">功能二</span>
+            </section>
+
+            <!-- 廣告A 30%：圖片 -->
+            <section class="h-[30vh] bg-white flex items-center justify-center border-b border-gray-200">
+                <img id="ad-a-img" src="https://via.placeholder.com/1000x300?text=%E5%BB%A3%E5%91%8AA" alt="廣告A" class="max-h-full object-contain" />
+            </section>
+
+            <!-- 按鈕A 20%：文字第一列靠左，第二列4按鈕，第三列4按鈕 -->
+            <section class="h-[20vh] bg-gray-50 px-4 py-3 border-b border-gray-200">
+                <div class="text-gray-800 font-semibold mb-2">按鈕A區塊</div>
+                <div class="grid grid-cols-4 gap-3 mb-3">
+                    <button class="bg-primary text-white py-2 rounded">A1</button>
+                    <button class="bg-primary text-white py-2 rounded">A2</button>
+                    <button class="bg-primary text-white py-2 rounded">A3</button>
+                    <button class="bg-primary text-white py-2 rounded">A4</button>
                 </div>
-                <div class="bg-primary/10 p-4 rounded-lg">
-                    <div class="w-12 h-12 bg-primary text-white rounded-full flex items-center justify-center mx-auto mb-2">?</div>
-                    <span class="text-sm font-medium text-gray-700">功能三</span>
+                <div class="grid grid-cols-4 gap-3">
+                    <button class="bg-primary/80 text-white py-2 rounded">A5</button>
+                    <button class="bg-primary/80 text-white py-2 rounded">A6</button>
+                    <button class="bg-primary/80 text-white py-2 rounded">A7</button>
+                    <button class="bg-primary/80 text-white py-2 rounded">A8</button>
                 </div>
-            </div>
-        </section>
+            </section>
 
-        <!-- 頁中C (20%) - 例如：快速連結 -->
-        <section class="h-[20%] bg-gray-50 p-4 overflow-y-auto border-b border-gray-200 flex-shrink-0">
-            <h3 class="text-lg font-semibold text-gray-800 mb-3">[頁中 C - 20%] 快速連結</h3>
-            <div id="section-C-content" class="space-y-2">
-                <p class="text-gray-600">連結 1</p>
-                <p class="text-gray-600">連結 2</p>
-            </div>
-        </section>
+            <!-- 廣告B 10%：圖片 -->
+            <section class="h-[10vh] bg-white flex items-center justify-center border-b border-gray-200">
+                <img id="ad-b-img" src="https://via.placeholder.com/1000x200?text=%E5%BB%A3%E5%91%8AB" alt="廣告B" class="max-h-full object-contain" />
+            </section>
 
-        <!-- 頁中D (20%) - 例如：社區新聞 -->
-        <section class="h-[20%] bg-white p-4 overflow-y-auto flex-shrink-0">
-            <h3 class="text-lg font-semibold text-gray-800 mb-3">[頁中 D - 20%] 社區新聞</h3>
-            <div id="section-D-content">
-                <p class="text-gray-600">新聞標題 1...</p>
-            </div>
-        </section>
+            <!-- 按鈕B 20%：文字第一列靠左，第二列4按鈕，第三列4按鈕 -->
+            <section class="h-[20vh] bg-gray-50 px-4 py-3">
+                <div class="text-gray-800 font-semibold mb-2">按鈕B區塊</div>
+                <div class="grid grid-cols-4 gap-3 mb-3">
+                    <button class="bg-indigo-600 text-white py-2 rounded">B1</button>
+                    <button class="bg-indigo-600 text-white py-2 rounded">B2</button>
+                    <button class="bg-indigo-600 text-white py-2 rounded">B3</button>
+                    <button class="bg-indigo-600 text-white py-2 rounded">B4</button>
+                </div>
+                <div class="grid grid-cols-4 gap-3">
+                    <button class="bg-indigo-500 text-white py-2 rounded">B5</button>
+                    <button class="bg-indigo-500 text-white py-2 rounded">B6</button>
+                    <button class="bg-indigo-500 text-white py-2 rounded">B7</button>
+                    <button class="bg-indigo-500 text-white py-2 rounded">B8</button>
+                </div>
+            </section>
+        </main>
 
-        <!-- 頁尾 (10%) - 導航欄 Tab Bar -->
-        <footer class="h-[10%] bg-white border-t border-gray-200 shadow-[0_-4px_10px_-5px_rgba(0,0,0,0.05)] flex items-center justify-around p-2 flex-shrink-0">
+        <!-- 固定頁尾 8%：置最上層、離下邊界 0 -->
+        <footer class="fixed bottom-0 left-0 right-0 h-[8vh] bg-white border-t border-gray-200 shadow-[0_-4px_10px_-5px_rgba(0,0,0,0.05)] flex items-center justify-around px-2 z-50">
             <button class="flex flex-col items-center justify-center text-primary">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6-4h.01M10 16h.01" />
