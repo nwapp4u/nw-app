@@ -284,7 +284,18 @@
 
                     } catch (error) {
                         console.error("登入失敗:", error);
-                        showError('#login-error', '登入失敗：' + error.message);
+                        // 嘗試以電話或未同步帳號自動建立並登入
+                        try {
+                            const mappedEmail = await ensureAuthUserFromAccounts(email, password);
+                            if (mappedEmail) {
+                                await signInWithEmailAndPassword(auth, mappedEmail, password);
+                                return; // 成功後交由 onAuthStateChanged
+                            }
+                        } catch (fallbackErr) {
+                            console.warn('嘗試修復未同步帳號登入失敗:', fallbackErr);
+                        }
+
+                        showError('#login-error', '登入失敗：' + (error?.message || '請確認帳號與密碼')); 
                         loginButton.disabled = false;
                         loginButton.innerText = '登入';
                     }
@@ -412,6 +423,41 @@
             }
         }
 
+        // 以 Firestore 帳號資料輔助登入：
+        // - 使用者輸入可為電子郵件或手機；若 Auth 無此使用者，嘗試從 Firestore 查找並在 Auth 建立後再登入
+        async function ensureAuthUserFromAccounts(identifier, typedPassword) {
+            const id = (identifier || '').trim();
+            if (!id) return null;
+            try {
+                const snap = await getDocs(accountsCollection());
+                let targetEmail = null;
+                snap.forEach(docSnap => {
+                    const data = docSnap.data();
+                    const email = (data.email || '').trim();
+                    const phone = (data.phone || '').trim();
+                    if (email && email.toLowerCase() === id.toLowerCase()) {
+                        targetEmail = email;
+                    } else if (phone && phone === id) {
+                        targetEmail = email; // 以該帳號的 email 進行 Auth
+                    }
+                });
+                if (!targetEmail) return null;
+
+                try {
+                    await createUserWithEmailAndPassword(auth, targetEmail, typedPassword);
+                } catch (err) {
+                    // 已存在則忽略
+                    if (!(err && err.code === 'auth/email-already-in-use')) {
+                        console.warn('建立 Auth 使用者失敗:', err?.code || err);
+                    }
+                }
+                return targetEmail;
+            } catch (err) {
+                console.warn('從 Firestore 辅助登入查找帳號失敗:', err);
+                return null;
+            }
+        }
+
         /**
          * 讀取所有社區以供選擇（簡化：不過濾使用者成員資格）
          */
@@ -421,7 +467,7 @@
                 const communities = [];
                 snap.forEach(docSnap => {
                     const data = docSnap.data();
-                    communities.push({ id: docSnap.id, name: data.name || '(未命名社區)' });
+                    communities.push({ id: docSnap.id, name: data.name || '(未命名社區)', photoUrl: data.photoUrl || '' });
                 });
                 return communities;
             } catch (err) {
@@ -504,7 +550,13 @@
             currentCommunity = community;
 
             // 設置頁面標題
-            document.getElementById('community-page-title').innerText = community.name;
+            const titleEl = document.getElementById('community-page-title');
+            if (titleEl) titleEl.innerText = `${community.name}社區`;
+            const photoEl = document.getElementById('community-page-photo');
+            if (photoEl) {
+                photoEl.src = community.photoUrl || '';
+                photoEl.style.display = community.photoUrl ? 'block' : 'none';
+            }
 
             // 示意：跑馬燈與廣告占位
             const marquee = document.getElementById('marquee-text');
@@ -1307,14 +1359,19 @@
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
             </button>
-            <h1 id="community-page-title" class="text-xl font-semibold">社區名稱</h1>
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full overflow-hidden bg-gray-200">
+                    <img id="community-page-photo" class="w-full h-full object-cover" alt="社區照片" onerror="this.style.display='none'" />
+                </div>
+                <h1 id="community-page-title" class="text-xl font-semibold">社區名稱社區</h1>
+            </div>
             <div class="w-8"></div>
         </header>
 
         <!-- 內容容器：扣除上下 8% 高度，按需求分段 -->
         <main class="pt-[8vh] pb-[8vh] h-[100vh] overflow-y-auto flex flex-col">
             <!-- 跑馬燈 4%：淺紅底黑細字 -->
-            <section class="h-[4vh] bg-red-100 text-black text-xs flex items-center px-4 border-b border-gray-200">
+            <section class="h-[4vh] bg-red-100 text-black text-base flex items-center px-4 border-b border-gray-200">
                 <div id="marquee-text" class="whitespace-nowrap overflow-hidden">
                     跑馬燈訊息...
                 </div>
