@@ -210,7 +210,8 @@
             const backButton = document.getElementById('back-to-selection');
             if(backButton) {
                 backButton.addEventListener('click', () => {
-                    // 重新顯示社區選擇頁面 (我們假定已載入)
+                    // 回到社區選擇並重新渲染列表
+                    renderCommunitySelection(MOCK_COMMUNITIES);
                     showView('#community-selection-view');
                 });
             }
