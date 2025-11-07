@@ -434,9 +434,9 @@
             const marquee = document.getElementById('marquee-text');
             if (marquee) marquee.textContent = `${community.name} 最新公告：歡迎加入本社區！`;
             const adA = document.getElementById('ad-a-img');
-            if (adA) adA.src = 'https://via.placeholder.com/1000x300?text=' + encodeURIComponent(community.name + ' 廣告A');
+            if (adA) adA.src = makeSvgPlaceholder(1000, 300, `${community.name} 廣告A`);
             const adB = document.getElementById('ad-b-img');
-            if (adB) adB.src = 'https://via.placeholder.com/1000x200?text=' + encodeURIComponent(community.name + ' 廣告B');
+            if (adB) adB.src = makeSvgPlaceholder(1000, 200, `${community.name} 廣告B`);
             
             // 顯示社區主頁
             showView('#community-page-view');
@@ -444,6 +444,23 @@
 
 
         // --- 輔助函數 ---
+
+        /**
+         * 產生可做為 <img> 的 SVG 佔位圖 data URI，避免外部網域請求
+         * @param {number} w 寬度
+         * @param {number} h 高度
+         * @param {string} text 顯示文字
+         * @param {string} bg 背景色 (預設灰底)
+         * @param {string} fg 前景色 (預設深灰字)
+         */
+        function makeSvgPlaceholder(w, h, text, bg = '#f3f4f6', fg = '#111827') {
+            const svg = `<?xml version="1.0" encoding="UTF-8"?>\n` +
+                `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">` +
+                `<rect width="100%" height="100%" fill="${bg}"/>` +
+                `<text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="${fg}" font-family="Inter, Noto Sans TC, Arial" font-size="${Math.round(h/6)}">${text}</text>` +
+                `</svg>`;
+            return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+        }
 
         /**
          * 顯示指定的 View，並隱藏其他的
@@ -1227,9 +1244,9 @@
                 </div>
             </section>
 
-            <!-- 廣告A 30%：圖片 -->
+            <!-- 廣告A 30%：圖片（使用內嵌 SVG 佔位，避免外部網域） -->
             <section class="h-[30vh] bg-white flex items-center justify-center border-b border-gray-200">
-                <img id="ad-a-img" src="https://via.placeholder.com/1000x300?text=%E5%BB%A3%E5%91%8AA" alt="廣告A" class="max-h-full object-contain" />
+                <img id="ad-a-img" src="data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1000' height='300'%3E%3Crect width='100%25' height='100%25' fill='%23f3f4f6'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23111827' font-family='Inter, Noto Sans TC, Arial' font-size='48'%3E%E5%BB%A3%E5%91%8AA%3C/text%3E%3C/svg%3E" alt="廣告A" class="max-h-full object-contain" />
             </section>
 
             <!-- 按鈕A 20%：文字第一列靠左，第二列4按鈕，第三列4按鈕 -->
@@ -1249,9 +1266,9 @@
                 </div>
             </section>
 
-            <!-- 廣告B 10%：圖片 -->
+            <!-- 廣告B 10%：圖片（使用內嵌 SVG 佔位，避免外部網域） -->
             <section class="h-[10vh] bg-white flex items-center justify-center border-b border-gray-200">
-                <img id="ad-b-img" src="https://via.placeholder.com/1000x200?text=%E5%BB%A3%E5%91%8AB" alt="廣告B" class="max-h-full object-contain" />
+                <img id="ad-b-img" src="data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1000' height='200'%3E%3Crect width='100%25' height='100%25' fill='%23f3f4f6'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23111827' font-family='Inter, Noto Sans TC, Arial' font-size='36'%3E%E5%BB%A3%E5%91%8AB%3C/text%3E%3C/svg%3E" alt="廣告B" class="max-h-full object-contain" />
             </section>
 
             <!-- 按鈕B 20%：文字第一列靠左，第二列4按鈕，第三列4按鈕 -->
