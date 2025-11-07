@@ -154,17 +154,93 @@
         }
 
         /**
-         * 上傳檔案到 Firebase Storage 並取得下載 URL
+         * 將檔案壓縮為 data URL（改用 Firestore 存字串，不依賴 Storage）
+         * 目標：確保輸出 < 1MB；自動縮放尺寸與降低 JPEG 品質
          * @param {File} file
-         * @param {string} pathPrefix e.g. 'communities' | 'accounts'
-         * @returns {Promise<string>} downloadURL
+         * @returns {Promise<string>} dataURL
          */
-        async function uploadPhotoAndGetURL(file, pathPrefix) {
+        async function uploadPhotoAndGetURL(file /*, pathPrefix */) {
             if (!file) return '';
-            const ts = Date.now();
-            const fileRef = ref(storage, `${pathPrefix}/${appId}/${ts}_${file.name}`);
-            const snap = await uploadBytes(fileRef, file);
-            return await getDownloadURL(snap.ref);
+            return await compressImageToDataURL(file, {
+                maxWidth: 800,
+                maxHeight: 800,
+                mime: 'image/jpeg',
+                initialQuality: 0.8,
+                minQuality: 0.5,
+                maxBytes: 950_000 // 留些餘裕，避免超過 Firestore 單文件大小上限約 1MB
+            });
+        }
+
+        /**
+         * 估算 data URL 的位元組數（以 base64 長度換算）
+         */
+        function estimateBytesFromDataURL(dataURL) {
+            const comma = dataURL.indexOf(',');
+            if (comma === -1) return dataURL.length;
+            const base64 = dataURL.slice(comma + 1);
+            // base64 -> bytes 換算：長度 * 3 / 4（去除填充誤差忽略）
+            return Math.ceil(base64.length * 3 / 4);
+        }
+
+        /**
+         * 圖片壓縮成 data URL。使用 canvas 對圖片縮放與降低品質，迴圈直到 < maxBytes。
+         * @param {File} file
+         * @param {{maxWidth:number,maxHeight:number,mime:string,initialQuality:number,minQuality:number,maxBytes:number}} opts
+         */
+        async function compressImageToDataURL(file, opts) {
+            const {
+                maxWidth = 800,
+                maxHeight = 800,
+                mime = 'image/jpeg',
+                initialQuality = 0.8,
+                minQuality = 0.5,
+                maxBytes = 950_000
+            } = opts || {};
+
+            // 讀入影像
+            const bitmap = await createImageBitmap(file).catch(async () => {
+                // 某些瀏覽器可能無法直接 createImageBitmap(File)
+                const dataURL = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+                return new Promise((resolve) => {
+                    const img = new Image();
+                    img.onload = () => resolve(img);
+                    img.src = dataURL;
+                });
+            });
+
+            // 初始縮放尺寸
+            let w = bitmap.width;
+            let h = bitmap.height;
+            const ratio = Math.min(1, maxWidth / w, maxHeight / h);
+            w = Math.max(1, Math.floor(w * ratio));
+            h = Math.max(1, Math.floor(h * ratio));
+
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            let quality = initialQuality;
+            let dataURL = '';
+            let loops = 0;
+
+            while (loops < 10) {
+                canvas.width = w; canvas.height = h;
+                ctx.clearRect(0, 0, w, h);
+                ctx.drawImage(bitmap, 0, 0, w, h);
+                dataURL = canvas.toDataURL(mime, quality);
+                const bytes = estimateBytesFromDataURL(dataURL);
+                if (bytes <= maxBytes) break;
+                // 若仍過大，降低品質與尺寸
+                if (quality > minQuality) quality = Math.max(minQuality, quality - 0.1);
+                w = Math.max(300, Math.floor(w * 0.9));
+                h = Math.max(300, Math.floor(h * 0.9));
+                loops++;
+            }
+            return dataURL;
         }
 
         /**
