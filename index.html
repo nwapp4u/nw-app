@@ -1208,7 +1208,7 @@
     -->
     <div id="community-page-view" class="app-view w-full hidden bg-white">
         <!-- 固定頁首 8%：黑字紅底、置最上層 -->
-        <header class="fixed top-0 left-0 right-0 h-[8vh] bg-red-600 text-black flex items-center justify-between px-4 shadow-lg z-50">
+        <header class="fixed top-0 left-0 right-0 h-[8vh] bg-white text-black flex items-center justify-between px-4 border-b border-gray-200 shadow-sm z-50">
             <button id="back-to-selection" class="p-2">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
@@ -1220,8 +1220,8 @@
 
         <!-- 內容容器：扣除上下 8% 高度，按需求分段 -->
         <main class="pt-[8vh] pb-[8vh] h-[100vh] overflow-y-auto flex flex-col">
-            <!-- 跑馬燈 4%：黑字白底 -->
-            <section class="h-[4vh] bg-white text-black flex items-center px-4 border-b border-gray-200">
+            <!-- 跑馬燈 4%：淺紅底黑細字 -->
+            <section class="h-[4vh] bg-red-100 text-black text-xs flex items-center px-4 border-b border-gray-200">
                 <div id="marquee-text" class="whitespace-nowrap overflow-hidden">
                     跑馬燈訊息...
                 </div>
@@ -1233,15 +1233,15 @@
             </section>
 
             <!-- 按鈕A 20%：文字第一列靠左，第二列4按鈕，第三列4按鈕 -->
-            <section class="h-[20vh] bg-gray-50 px-4 py-3 border-b border-gray-200">
-                <div class="text-gray-800 font-semibold mb-2">按鈕A區塊</div>
-                <div class="grid grid-cols-4 gap-3 mb-3">
+            <section class="h-[20vh] bg-gray-50 px-4 py-0 border-b border-gray-200">
+                <div class="h-[4vh] flex items-center text-gray-800 font-semibold">社區服務</div>
+                <div class="h-[8vh] grid grid-cols-4 gap-3">
                     <button class="bg-primary text-white py-2 rounded">A1</button>
                     <button class="bg-primary text-white py-2 rounded">A2</button>
                     <button class="bg-primary text-white py-2 rounded">A3</button>
                     <button class="bg-primary text-white py-2 rounded">A4</button>
                 </div>
-                <div class="grid grid-cols-4 gap-3">
+                <div class="h-[8vh] grid grid-cols-4 gap-3">
                     <button class="bg-primary/80 text-white py-2 rounded">A5</button>
                     <button class="bg-primary/80 text-white py-2 rounded">A6</button>
                     <button class="bg-primary/80 text-white py-2 rounded">A7</button>
@@ -1255,15 +1255,15 @@
             </section>
 
             <!-- 按鈕B 20%：文字第一列靠左，第二列4按鈕，第三列4按鈕 -->
-            <section class="h-[20vh] bg-gray-50 px-4 py-3">
-                <div class="text-gray-800 font-semibold mb-2">按鈕B區塊</div>
-                <div class="grid grid-cols-4 gap-3 mb-3">
+            <section class="h-[20vh] bg-gray-50 px-4 py-0">
+                <div class="h-[4vh] flex items-center text-gray-800 font-semibold">生活服務</div>
+                <div class="h-[8vh] grid grid-cols-4 gap-3">
                     <button class="bg-indigo-600 text-white py-2 rounded">B1</button>
                     <button class="bg-indigo-600 text-white py-2 rounded">B2</button>
                     <button class="bg-indigo-600 text-white py-2 rounded">B3</button>
                     <button class="bg-indigo-600 text-white py-2 rounded">B4</button>
                 </div>
-                <div class="grid grid-cols-4 gap-3">
+                <div class="h-[8vh] grid grid-cols-4 gap-3">
                     <button class="bg-indigo-500 text-white py-2 rounded">B5</button>
                     <button class="bg-indigo-500 text-white py-2 rounded">B6</button>
                     <button class="bg-indigo-500 text-white py-2 rounded">B7</button>
