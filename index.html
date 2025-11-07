@@ -23,7 +23,8 @@
             signInWithCustomToken,
             setPersistence,
             inMemoryPersistence,
-            browserLocalPersistence
+            browserLocalPersistence,
+            createUserWithEmailAndPassword
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, 
@@ -36,12 +37,19 @@
             updateDoc,
             deleteDoc
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import {
+            getStorage,
+            ref,
+            uploadBytes,
+            getDownloadURL
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
 
         // 啟動 Firebase Debug 模式
         setLogLevel('Debug');
 
         // --- 全局變數 ---
-        let app, auth, db;
+        let app, auth, db, storage;
+        let secondaryApp = null, secondaryAuth = null;
         let userId = null;
         let currentCommunity = null;
         // 角色：管理員、社區經理、社區秘書
@@ -51,11 +59,7 @@
         const COMMUNITY_STORE = [];
         const ACCOUNT_STORE = [];
         
-        // 模擬的社區資料 (實際情況應從 Firestore 讀取)
-        const MOCK_COMMUNITIES = [
-            { id: 'comm_A', name: '幸福花園社區' },
-            { id: 'comm_B', name: '勝利一號社區' },
-        ];
+        // 模擬資料已不再使用；社區列表改為從 Firestore 讀取
 
         // --- Firebase 配置 ---
         // 這些變數 ( __firebase_config, __app_id, __initial_auth_token ) 
@@ -93,6 +97,7 @@
                 app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
+                storage = getStorage(app);
                 
                 // 為了在 iframe 中正常運作，設置 session 儲存
                 setPersistence(auth, inMemoryPersistence);
@@ -146,6 +151,20 @@
                     showView('#login-view');
                 }
             });
+        }
+
+        /**
+         * 上傳檔案到 Firebase Storage 並取得下載 URL
+         * @param {File} file
+         * @param {string} pathPrefix e.g. 'communities' | 'accounts'
+         * @returns {Promise<string>} downloadURL
+         */
+        async function uploadPhotoAndGetURL(file, pathPrefix) {
+            if (!file) return '';
+            const ts = Date.now();
+            const fileRef = ref(storage, `${pathPrefix}/${appId}/${ts}_${file.name}`);
+            const snap = await uploadBytes(fileRef, file);
+            return await getDownloadURL(snap.ref);
         }
 
         /**
@@ -228,9 +247,9 @@
             // 從社區主頁返回社區列表
             const backButton = document.getElementById('back-to-selection');
             if(backButton) {
-                backButton.addEventListener('click', () => {
-                    // 回到社區選擇並重新渲染列表
-                    renderCommunitySelection(MOCK_COMMUNITIES);
+                backButton.addEventListener('click', async () => {
+                    const communities = await fetchAllCommunitiesForSelection();
+                    renderCommunitySelection(communities);
                     showView('#community-selection-view');
                 });
             }
@@ -238,9 +257,9 @@
             // 設定頁左上角返回按鈕
             const settingsBackBtn = document.getElementById('settings-back-btn');
             if (settingsBackBtn) {
-                settingsBackBtn.addEventListener('click', () => {
-                    // 回到社區選擇並重新渲染列表
-                    renderCommunitySelection(MOCK_COMMUNITIES);
+                settingsBackBtn.addEventListener('click', async () => {
+                    const communities = await fetchAllCommunitiesForSelection();
+                    renderCommunitySelection(communities);
                     showView('#community-selection-view');
                 });
             }
@@ -312,28 +331,32 @@
         }
 
         /**
-         * (模擬) 載入用戶擁有的社區列表
+         * 讀取所有社區以供選擇（簡化：不過濾使用者成員資格）
+         */
+        async function fetchAllCommunitiesForSelection() {
+            try {
+                const snap = await getDocs(communitiesCollection());
+                const communities = [];
+                snap.forEach(docSnap => {
+                    const data = docSnap.data();
+                    communities.push({ id: docSnap.id, name: data.name || '(未命名社區)' });
+                });
+                return communities;
+            } catch (err) {
+                console.error('讀取社區列表失敗', err);
+                return [];
+            }
+        }
+
+        /**
+         * 載入用戶擁有的社區列表（目前簡化為顯示全部社區）
          */
         async function loadUserCommunities(uid) {
             showView('#loading-view'); // 顯示載入中
             console.log(`正在為用戶 ${uid} 載入社區...`);
 
             try {
-                // --- 實際的 Firestore 讀取邏輯 (應取消註解) ---
-                // const userDocPath = `/artifacts/${appId}/users/${uid}/profile`; // 私人數據
-                // const userDocRef = doc(db, userDocPath);
-                // const userDoc = await getDoc(userDocRef);
-                
-                // let communities = [];
-                // if (userDoc.exists() && userDoc.data().communities) {
-                //     // 假設 'communities' 是一個數組: [{id: 'commA', name: '社區A'}, ...]
-                //     communities = userDoc.data().communities;
-                // } else {
-                //     console.warn("找不到用戶資料或社區列表。");
-                // }
-
-                // --- 使用模擬資料 ---
-                const communities = MOCK_COMMUNITIES;
+                const communities = await fetchAllCommunitiesForSelection();
                 console.log("獲取到的社區:", communities);
 
                 // 根據社區數量決定顯示哪個頁面
@@ -581,7 +604,7 @@
                         const file = photoInput.files?.[0];
                         if (file) {
                             const url = URL.createObjectURL(file);
-                            c.__tempPhotoUrl = url;
+                            c.__tempPhotoFile = file;
                             photoPreview.innerHTML = `<img src="${url}" class="w-full h-full object-cover" />`;
                         }
                     });
@@ -594,12 +617,15 @@
                             return;
                         }
                         try {
-                            const photoToSave = c.__tempPhotoUrl ? c.__tempPhotoUrl : c.photoUrl;
+                            let photoToSave = c.photoUrl;
+                            if (c.__tempPhotoFile) {
+                                photoToSave = await uploadPhotoAndGetURL(c.__tempPhotoFile, 'communities');
+                            }
                             if (c.__id) {
                                 await updateDoc(communityDoc(c.__id), { photoUrl: photoToSave, code: newCode, name: newName, population: newPop });
                             }
                             c.photoUrl = photoToSave;
-                            delete c.__tempPhotoUrl;
+                            delete c.__tempPhotoFile;
                             c.code = newCode; c.name = newName; c.population = newPop; c.__editing = false;
                             renderCommunitySettings();
                         } catch (err) {
@@ -607,7 +633,7 @@
                             alert('更新失敗');
                         }
                     });
-                    cancelBtn?.addEventListener('click', () => { delete c.__tempPhotoUrl; c.__editing = false; renderCommunitySettings(); });
+                    cancelBtn?.addEventListener('click', () => { delete c.__tempPhotoFile; c.__editing = false; renderCommunitySettings(); });
                 } else {
                     const editBtn = row.querySelector(`#edit-${idx}`);
                     const delBtn = row.querySelector(`#del-${idx}`);
@@ -646,8 +672,8 @@
                 return;
             }
 
-            const photoUrl = URL.createObjectURL(photoInput.files[0]);
             try {
+                const photoUrl = await uploadPhotoAndGetURL(photoInput.files[0], 'communities');
                 const docRef = await addDoc(communitiesCollection(), { photoUrl, code, name, population, createdAt: Date.now() });
                 COMMUNITY_STORE.push({ __id: docRef.id, photoUrl, code, name, population });
                 // 清空表單
@@ -716,7 +742,7 @@
                         const file = photoInput.files?.[0];
                         if (file) {
                             const url = URL.createObjectURL(file);
-                            a.__tempPhotoUrl = url;
+                            a.__tempPhotoFile = file;
                             photoPreview.innerHTML = `<img src="${url}" class="w-full h-full object-cover" />`;
                         }
                     });
@@ -729,19 +755,21 @@
                         const phone = row.querySelector(`#edit-phone-${idx}`).value.trim();
                         if (!role || !name || !email || !def || !con || !phone) { alert('所有欄位皆為必填'); return; }
                         try {
+                            let photoToSave = a.photoUrl;
+                            if (a.__tempPhotoFile) {
+                                photoToSave = await uploadPhotoAndGetURL(a.__tempPhotoFile, 'accounts');
+                            }
                             if (a.__id) {
-                                const photoToSave = a.__tempPhotoUrl ? a.__tempPhotoUrl : a.photoUrl;
                                 await updateDoc(accountDoc(a.__id), { photoUrl: photoToSave, role, name, email, defaultPassword: def, confirmPassword: con, phone });
                             }
-                            const photoToSaveLocal = a.__tempPhotoUrl ? a.__tempPhotoUrl : a.photoUrl;
-                            a.photoUrl = photoToSaveLocal;
-                            delete a.__tempPhotoUrl;
+                            a.photoUrl = photoToSave;
+                            delete a.__tempPhotoFile;
                             a.role = role; a.name = name; a.email = email; a.defaultPassword = def; a.confirmPassword = con; a.phone = phone;
                             a.__editing = false;
                             renderAccountSettings();
                         } catch (err) { console.error('更新帳號失敗', err); alert('更新失敗'); }
                     });
-                    cancelBtn?.addEventListener('click', () => { delete a.__tempPhotoUrl; a.__editing = false; renderAccountSettings(); });
+                    cancelBtn?.addEventListener('click', () => { delete a.__tempPhotoFile; a.__editing = false; renderAccountSettings(); });
                 } else {
                     const editBtn = row.querySelector(`#edit-${idx}`);
                     const delBtn = row.querySelector(`#del-${idx}`);
@@ -779,8 +807,8 @@
                 alert('預設密碼與再次確認密碼不一致');
                 return;
             }
-            const photoUrl = URL.createObjectURL(photo.files[0]);
             try {
+                const photoUrl = await uploadPhotoAndGetURL(photo.files[0], 'accounts');
                 const docRef = await addDoc(accountsCollection(), {
                     photoUrl,
                     role: role.value,
@@ -792,6 +820,17 @@
                     createdAt: Date.now()
                 });
                 ACCOUNT_STORE.push({ __id: docRef.id, photoUrl, role: role.value, name: name.value.trim(), email: email.value.trim(), defaultPassword: pass.value, confirmPassword: pass2.value, phone: phone.value.trim() });
+                // 嘗試建立 Firebase Auth 使用者（使用次要 Auth 避免影響目前登入狀態）
+                try {
+                    if (!secondaryApp) {
+                        secondaryApp = initializeApp(firebaseConfig, 'secondary');
+                        secondaryAuth = getAuth(secondaryApp);
+                    }
+                    await createUserWithEmailAndPassword(secondaryAuth, email.value.trim(), pass.value);
+                } catch (authErr) {
+                    // 已存在或其他錯誤時略過，不阻塞帳號建立
+                    console.warn('建立 Firebase Auth 使用者失敗或已存在:', authErr?.code || authErr);
+                }
                 // 清空表單
                 photo.value = '';
                 role.value = '管理員';
