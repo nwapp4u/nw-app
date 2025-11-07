@@ -1,6 +1,8 @@
 Add-Type -AssemblyName System.Net
 $listener = New-Object System.Net.HttpListener
-$prefix = "http://localhost:8000/"
+$port = $env:PORT
+if ([string]::IsNullOrWhiteSpace($port)) { $port = '8000' }
+$prefix = "http://localhost:$port/"
 $listener.Prefixes.Clear()
 $listener.Prefixes.Add($prefix)
 $listener.Start()

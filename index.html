@@ -300,6 +300,12 @@
             if (addAccountForm) {
                 addAccountForm.addEventListener('submit', handleAddAccountSubmit);
             }
+            const syncAuthBtn = document.getElementById('sync-auth-users');
+            if (syncAuthBtn) {
+                syncAuthBtn.addEventListener('click', () => {
+                    syncAccountsToAuth();
+                });
+            }
 
             // 新增社區照片預覽
             const communityPhotoInput = document.getElementById('community-photo');
@@ -570,7 +576,7 @@
                 if (c.__editing) {
                     row.innerHTML = `
                         <div class="flex flex-col items-center gap-1">
-                            <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden" id="edit-photo-preview-${idx}">${c.photoUrl ? `<img src="${c.photoUrl}" class="w-full h-full object-cover" />` : ''}</div>
+                            <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden" id="edit-photo-preview-${idx}">${c.photoUrl ? `<img src="${c.photoUrl}" class="w-full h-full object-cover" onerror="this.style.display='none'" />` : ''}</div>
                             <input type="file" accept="image/*" id="edit-photo-${idx}" class="text-xs" />
                         </div>
                         <input class="border rounded px-2 py-1" value="${c.code}" id="edit-code-${idx}" />
@@ -583,7 +589,7 @@
                     `;
                 } else {
                     row.innerHTML = `
-                        <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden">${c.photoUrl ? `<img src="${c.photoUrl}" class="w-full h-full object-cover" />` : ''}</div>
+                        <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden">${c.photoUrl ? `<img src="${c.photoUrl}" class="w-full h-full object-cover" onerror="this.style.display='none'" />` : ''}</div>
                         <div class="text-gray-700 font-medium">${c.code}</div>
                         <div class="text-gray-700">${c.name}</div>
                         <div class="text-gray-700">${c.population}</div>
@@ -702,7 +708,7 @@
                 if (a.__editing) {
                     row.innerHTML = `
                         <div class="flex flex-col items-center gap-1">
-                            <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden" id="edit-account-photo-preview-${idx}">${a.photoUrl ? `<img src="${a.photoUrl}" class="w-full h-full object-cover" />` : ''}</div>
+                            <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden" id="edit-account-photo-preview-${idx}">${a.photoUrl ? `<img src="${a.photoUrl}" class="w-full h-full object-cover" onerror="this.style.display='none'" />` : ''}</div>
                             <input type="file" accept="image/*" id="edit-account-photo-${idx}" class="text-xs" />
                         </div>
                         <input class="border rounded px-2 py-1" value="${a.role}" id="edit-role-${idx}" />
@@ -718,7 +724,7 @@
                     `;
                 } else {
                     row.innerHTML = `
-                        <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden">${a.photoUrl ? `<img src="${a.photoUrl}" class="w-full h-full object-cover" />` : ''}</div>
+                        <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden">${a.photoUrl ? `<img src="${a.photoUrl}" class="w-full h-full object-cover" onerror="this.style.display='none'" />` : ''}</div>
                         <div class="text-gray-700">${a.role}</div>
                         <div class="text-gray-700">${a.name}</div>
                         <div class="text-gray-700">${a.email}</div>
@@ -843,6 +849,51 @@
             } catch (err) {
                 console.error('新增帳號失敗', err);
                 alert('新增失敗');
+            }
+        }
+
+        /**
+         * 將現有 Firestore 帳號批次建立到 Firebase Auth
+         * - 使用次要 Auth（secondaryAuth）避免影響目前登入狀態
+         * - 略過已存在的帳號（auth/email-already-in-use）
+         */
+        async function syncAccountsToAuth() {
+            try {
+                // 初始化次要 App/Auth
+                if (!secondaryApp) {
+                    secondaryApp = initializeApp(firebaseConfig, 'secondary');
+                    secondaryAuth = getAuth(secondaryApp);
+                }
+
+                const snap = await getDocs(accountsCollection());
+                let created = 0, existed = 0, failed = 0;
+                const tasks = [];
+                snap.forEach(docSnap => {
+                    const data = docSnap.data();
+                    const email = (data.email || '').trim();
+                    const password = (data.defaultPassword || '').toString();
+                    if (!email || !password) return; // 資料不完整略過
+                    tasks.push({ email, password });
+                });
+
+                for (const t of tasks) {
+                    try {
+                        await createUserWithEmailAndPassword(secondaryAuth, t.email, t.password);
+                        created++;
+                    } catch (err) {
+                        if (err && err.code === 'auth/email-already-in-use') {
+                            existed++;
+                        } else {
+                            console.warn('同步帳號失敗', t.email, err?.code || err);
+                            failed++;
+                        }
+                    }
+                }
+
+                alert(`同步完成：新增 ${created}，已存在 ${existed}，失敗 ${failed}`);
+            } catch (err) {
+                console.error('批次同步到 Firebase Auth 失敗', err);
+                alert('批次同步失敗');
             }
         }
 
@@ -1048,6 +1099,9 @@
                         </div>
                     </form>
                     <p class="text-xs text-gray-500 mt-2">電子郵件與手機號碼皆可作為登入帳號；僅管理員顯示「設定」分頁。</p>
+                    <div class="mt-3">
+                        <button id="sync-auth-users" type="button" class="px-4 py-2 bg-primary text-white rounded-lg">同步帳號到登入系統</button>
+                    </div>
                 </div>
 
                 <!-- 帳號列表 -->
