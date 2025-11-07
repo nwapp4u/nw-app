@@ -216,6 +216,16 @@
                 });
             }
 
+            // 設定頁左上角返回按鈕
+            const settingsBackBtn = document.getElementById('settings-back-btn');
+            if (settingsBackBtn) {
+                settingsBackBtn.addEventListener('click', () => {
+                    // 回到社區選擇並重新渲染列表
+                    renderCommunitySelection(MOCK_COMMUNITIES);
+                    showView('#community-selection-view');
+                });
+            }
+
             // 選擇社區頁的頁尾「設定」按鈕
             const selectionSettingsBtn = document.getElementById('selection-footer-settings');
             if (selectionSettingsBtn) {
@@ -251,6 +261,34 @@
             const addAccountForm = document.getElementById('add-account-form');
             if (addAccountForm) {
                 addAccountForm.addEventListener('submit', handleAddAccountSubmit);
+            }
+
+            // 新增社區照片預覽
+            const communityPhotoInput = document.getElementById('community-photo');
+            const communityPreview = document.getElementById('community-photo-preview');
+            const communityPreviewImg = document.getElementById('community-photo-preview-img');
+            if (communityPhotoInput && communityPreview && communityPreviewImg) {
+                communityPhotoInput.addEventListener('change', () => {
+                    const file = communityPhotoInput.files?.[0];
+                    if (file) {
+                        communityPreviewImg.src = URL.createObjectURL(file);
+                        communityPreview.classList.remove('hidden');
+                    }
+                });
+            }
+
+            // 新增帳號照片預覽
+            const accountPhotoInput = document.getElementById('account-photo');
+            const accountPreview = document.getElementById('account-photo-preview');
+            const accountPreviewImg = document.getElementById('account-photo-preview-img');
+            if (accountPhotoInput && accountPreview && accountPreviewImg) {
+                accountPhotoInput.addEventListener('change', () => {
+                    const file = accountPhotoInput.files?.[0];
+                    if (file) {
+                        accountPreviewImg.src = URL.createObjectURL(file);
+                        accountPreview.classList.remove('hidden');
+                    }
+                });
             }
         }
 
@@ -389,18 +427,18 @@
             }
         }
 
-        // Firestore 集合參考（移除前導斜線，改用段落以避免路徑錯誤）
+        // Firestore 集合參考（簡化為 artifacts/{appId}/communities 與 accounts）
         function communitiesCollection() {
-            return collection(db, 'artifacts', appId, 'settings', 'communities');
+            return collection(db, 'artifacts', appId, 'communities');
         }
         function accountsCollection() {
-            return collection(db, 'artifacts', appId, 'settings', 'accounts');
+            return collection(db, 'artifacts', appId, 'accounts');
         }
         function communityDoc(id) {
-            return doc(db, 'artifacts', appId, 'settings', 'communities', id);
+            return doc(db, 'artifacts', appId, 'communities', id);
         }
         function accountDoc(id) {
-            return doc(db, 'artifacts', appId, 'settings', 'accounts', id);
+            return doc(db, 'artifacts', appId, 'accounts', id);
         }
 
         // 載入設定頁資料（社區與帳號）
@@ -810,7 +848,7 @@
     <div id="settings-view" class="app-view h-dvh w-full hidden flex flex-col bg-gray-100">
         <!-- 頁首 (10%) -->
         <header class="h-[10%] bg-primary text-white flex items-center justify-between p-4 shadow-lg z-10 flex-shrink-0">
-            <button class="p-2" onclick="showView('#community-selection-view')">
+            <button id="settings-back-btn" class="p-2">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
@@ -836,6 +874,9 @@
                         <div>
                             <label class="block text-sm text-gray-600 mb-2">社區照片</label>
                             <input id="community-photo" type="file" accept="image/*" required class="w-full" />
+                            <div id="community-photo-preview" class="mt-2 w-24 h-24 rounded overflow-hidden border border-gray-200 hidden">
+                                <img id="community-photo-preview-img" class="w-full h-full object-cover" alt="預覽" />
+                            </div>
                         </div>
                         <div>
                             <label class="block text-sm text-gray-600 mb-2">社區編號</label>
@@ -879,6 +920,9 @@
                         <div>
                             <label class="block text-sm text-gray-600 mb-2">帳號照片</label>
                             <input id="account-photo" type="file" accept="image/*" required class="w-full" />
+                            <div id="account-photo-preview" class="mt-2 w-24 h-24 rounded overflow-hidden border border-gray-200 hidden">
+                                <img id="account-photo-preview-img" class="w-full h-full object-cover" alt="預覽" />
+                            </div>
                         </div>
                         <div>
                             <label class="block text-sm text-gray-600 mb-2">角色</label>
