@@ -769,6 +769,32 @@
                         allCommunities: !!data.allCommunities
                     });
                 });
+                // 若未包含指定管理員帳號，建立一筆預設資料
+                const adminEmail = 'nwapp.eason@gmail.com';
+                const hasAdmin = ACCOUNT_STORE.some(a => a.email === adminEmail);
+                if (!hasAdmin) {
+                    try {
+                        const defaultAdmin = {
+                            photoUrl: '',
+                            role: '管理員',
+                            name: '管理員',
+                            email: adminEmail,
+                            defaultPassword: '',
+                            confirmPassword: '',
+                            phone: '',
+                            permission: 'edit',
+                            allCommunities: true,
+                            communityIds: COMMUNITY_STORE.map(c => c.__id),
+                            createdAt: Date.now()
+                        };
+                        const docRef = await addDoc(accountsCollection(), defaultAdmin);
+                        ACCOUNT_STORE.push({ __id: docRef.id, ...defaultAdmin });
+                    } catch (seedErr) {
+                        console.warn('建立管理員帳號失敗（略過，不影響顯示）:', seedErr);
+                        // 即使 Firestore 寫入失敗，也推入前端顯示，方便後續手動補齊
+                        ACCOUNT_STORE.push({ __id: undefined, photoUrl: '', role: '管理員', name: '管理員', email: adminEmail, defaultPassword: '', confirmPassword: '', phone: '', permission: 'edit', communityIds: COMMUNITY_STORE.map(c => c.__id), allCommunities: true });
+                    }
+                }
                 // 渲染新增帳號的社區選項
                 renderAddAccountCommunityOptions();
             } catch (err) {
@@ -955,8 +981,18 @@
 
             ACCOUNT_STORE.forEach((a, idx) => {
                 const row = document.createElement('div');
-                row.className = 'grid grid-cols-[64px,1fr,1fr,2fr,1fr,1fr,2fr,auto] gap-4 items-center bg-white p-4 rounded-lg shadow-sm';
+                row.className = 'grid grid-cols-[64px,1fr,1fr,2fr,2fr,1fr,1fr,2fr,1fr,auto] gap-4 items-center bg-white p-4 rounded-lg shadow-sm text-left';
+                const communityNames = a.allCommunities
+                    ? '全部社區'
+                    : (Array.isArray(a.communityIds) && a.communityIds.length > 0
+                        ? COMMUNITY_STORE.filter(c => a.communityIds.includes(c.__id)).map(c => c.name).join('、')
+                        : '(未選擇)');
+                const permissionLabel = a.permission === 'edit' ? '可編輯' : '僅瀏覽';
                 if (a.__editing) {
+                    const communityOptions = COMMUNITY_STORE.map(c => {
+                        const checked = a.allCommunities || (Array.isArray(a.communityIds) && a.communityIds.includes(c.__id)) ? 'checked' : '';
+                        return `<label class="inline-flex items-center text-sm text-gray-700"><input type="checkbox" class="account-community-checkbox mr-2" value="${c.__id}" ${checked}>${c.name}</label>`;
+                    }).join('');
                     row.innerHTML = `
                         <div class="flex flex-col items-center gap-1">
                             <div class="w-14 h-14 rounded-full bg-gray-200 overflow-hidden" id="edit-account-photo-preview-${idx}">${a.photoUrl ? `<img src="${a.photoUrl}" class="w-full h-full object-cover" onerror="this.style.display='none'" />` : ''}</div>
@@ -965,6 +1001,23 @@
                         <input class="border rounded px-2 py-1" value="${a.role}" id="edit-role-${idx}" />
                         <input class="border rounded px-2 py-1" value="${a.name}" id="edit-name-${idx}" />
                         <input class="border rounded px-2 py-1" value="${a.email}" id="edit-email-${idx}" />
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-2">可管理社區（可複選）</label>
+                            <div class="flex items-center mb-2">
+                                <label class="inline-flex items-center text-sm text-gray-700">
+                                    <input id="edit-communities-all-${idx}" type="checkbox" class="mr-2" ${a.allCommunities ? 'checked' : ''}>
+                                    全選所有社區
+                                </label>
+                            </div>
+                            <div id="edit-account-communities-options-${idx}" class="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-gray-50">${communityOptions}</div>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-2">權限</label>
+                            <select id="edit-permission-${idx}" class="w-full px-2 py-1 border rounded">
+                                <option value="view" ${a.permission === 'view' ? 'selected' : ''}>僅瀏覽</option>
+                                <option value="edit" ${a.permission === 'edit' ? 'selected' : ''}>可編輯</option>
+                            </select>
+                        </div>
                         <input class="border rounded px-2 py-1" value="${a.defaultPassword}" id="edit-def-${idx}" />
                         <input class="border rounded px-2 py-1" value="${a.confirmPassword}" id="edit-con-${idx}" />
                         <input class="border rounded px-2 py-1" value="${a.phone}" id="edit-phone-${idx}" />
@@ -979,6 +1032,8 @@
                         <div class="text-gray-700">${a.role}</div>
                         <div class="text-gray-700">${a.name}</div>
                         <div class="text-gray-700">${a.email}</div>
+                        <div class="text-gray-700">${communityNames}</div>
+                        <div class="text-gray-700">${permissionLabel}</div>
                         <div class="text-gray-700">${a.defaultPassword}</div>
                         <div class="text-gray-700">${a.confirmPassword}</div>
                         <div class="text-gray-700">${a.phone}</div>
@@ -995,6 +1050,8 @@
                     const cancelBtn = row.querySelector(`#cancel-${idx}`);
                     const photoInput = row.querySelector(`#edit-account-photo-${idx}`);
                     const photoPreview = row.querySelector(`#edit-account-photo-preview-${idx}`);
+                    const allEl = row.querySelector(`#edit-communities-all-${idx}`);
+                    const optionsContainer = row.querySelector(`#edit-account-communities-options-${idx}`);
                     photoInput?.addEventListener('change', () => {
                         const file = photoInput.files?.[0];
                         if (file) {
@@ -1003,10 +1060,19 @@
                             photoPreview.innerHTML = `<img src="${url}" class="w-full h-full object-cover" />`;
                         }
                     });
+                    allEl?.addEventListener('change', () => {
+                        const checked = allEl.checked;
+                        const checkboxes = Array.from(optionsContainer.querySelectorAll('.account-community-checkbox'));
+                        checkboxes.forEach(cb => { cb.checked = checked; });
+                    });
                     saveBtn?.addEventListener('click', async () => {
                         const role = row.querySelector(`#edit-role-${idx}`).value.trim();
                         const name = row.querySelector(`#edit-name-${idx}`).value.trim();
                         const email = row.querySelector(`#edit-email-${idx}`).value.trim();
+                        const permission = row.querySelector(`#edit-permission-${idx}`).value;
+                        const selectedCommunityEls = Array.from(row.querySelectorAll(`#edit-account-communities-options-${idx} .account-community-checkbox`));
+                        const allCommunities = !!(allEl && allEl.checked);
+                        const communityIds = allCommunities ? COMMUNITY_STORE.map(c => c.__id) : selectedCommunityEls.filter(cb => cb.checked).map(cb => cb.value);
                         const def = row.querySelector(`#edit-def-${idx}`).value.trim();
                         const con = row.querySelector(`#edit-con-${idx}`).value.trim();
                         const phone = row.querySelector(`#edit-phone-${idx}`).value.trim();
@@ -1017,11 +1083,12 @@
                                 photoToSave = await uploadPhotoAndGetURL(a.__tempPhotoFile, 'accounts');
                             }
                             if (a.__id) {
-                                await updateDoc(accountDoc(a.__id), { photoUrl: photoToSave, role, name, email, defaultPassword: def, confirmPassword: con, phone });
+                                await updateDoc(accountDoc(a.__id), { photoUrl: photoToSave, role, name, email, defaultPassword: def, confirmPassword: con, phone, permission, communityIds, allCommunities });
                             }
                             a.photoUrl = photoToSave;
                             delete a.__tempPhotoFile;
                             a.role = role; a.name = name; a.email = email; a.defaultPassword = def; a.confirmPassword = con; a.phone = phone;
+                            a.permission = permission; a.communityIds = communityIds; a.allCommunities = allCommunities;
                             a.__editing = false;
                             renderAccountSettings();
                         } catch (err) { console.error('更新帳號失敗', err); alert('更新失敗'); }
@@ -1373,12 +1440,14 @@
 
                 <!-- 帳號列表 -->
                 <div class="bg-white p-4 rounded-xl shadow-md settings-scroll-container overflow-x-auto">
-                    <div class="min-w-[1100px]">
-                        <div class="grid grid-cols-[64px,1fr,1fr,2fr,1fr,1fr,2fr,auto] gap-4 text-gray-500 text-sm font-medium mb-2">
+                    <div class="min-w-[1600px]">
+                        <div class="grid grid-cols-[64px,1fr,1fr,2fr,2fr,1fr,1fr,2fr,1fr,auto] gap-4 text-gray-500 text-sm font-medium mb-2 text-left">
                             <div>帳號照片</div>
                             <div>角色</div>
                             <div>姓名</div>
                             <div>電子郵件</div>
+                            <div>可管理社區</div>
+                            <div>權限</div>
                             <div>預設密碼</div>
                             <div>再次確認密碼</div>
                             <div>手機號碼</div>
