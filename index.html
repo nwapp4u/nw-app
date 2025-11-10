@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>社區 APP</title>
+    <title>西北社區PP</title>
     <!-- 載入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- 載入 Inter 字體 -->
@@ -54,6 +54,10 @@
         let currentCommunity = null;
         // 角色：管理員、社區經理、社區秘書
         let currentUserRole = '管理員'; // 預設為管理員以便測試設定頁
+        let currentPermission = 'view'; // view | edit
+        let currentCommunityIds = []; // 使用者可見的社區 id
+        let currentAllCommunities = true; // 是否全社區
+        let currentCanEdit = true; // 是否可編輯
         
         // 設定頁資料來源（將以 Firestore 為主，失敗時可維持空陣列）
         const COMMUNITY_STORE = [];
@@ -136,21 +140,66 @@
             }
             
             // 4. 設置認證狀態監聽
-            onAuthStateChanged(auth, (user) => {
+            onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     // --- 用戶已登入 ---
                     console.log("用戶已登入:", user.uid);
                     userId = user.uid;
+                    await loadCurrentAccountByAuth(user);
                     // 載入用戶的社區資料
                     loadUserCommunities(userId);
+                    // 依權限刷新 UI
+                    initRoleBasedUI();
                 } else {
                     // --- 用戶已登出或未登入 ---
                     console.log("用戶未登入。");
                     userId = null;
+                    currentPermission = 'view';
+                    currentCommunityIds = [];
+                    currentAllCommunities = false;
+                    currentCanEdit = false;
                     // 顯示登入頁面
                     showView('#login-view');
                 }
             });
+        }
+
+        /**
+         * 依目前登入使用者載入對應帳號設定（社區與權限）
+         */
+        async function loadCurrentAccountByAuth(user) {
+            try {
+                const email = (user.email || '').trim().toLowerCase();
+                const snap = await getDocs(accountsCollection());
+                let matched = null;
+                snap.forEach(docSnap => {
+                    const data = docSnap.data();
+                    const accEmail = (data.email || '').trim().toLowerCase();
+                    if (email && accEmail === email) {
+                        matched = { id: docSnap.id, ...data };
+                    }
+                });
+                if (matched) {
+                    currentUserRole = matched.role || currentUserRole;
+                    currentPermission = matched.permission || (currentUserRole === '管理員' ? 'edit' : 'view');
+                    currentAllCommunities = !!matched.allCommunities || (currentUserRole === '管理員');
+                    currentCommunityIds = Array.isArray(matched.communityIds) ? matched.communityIds : [];
+                    currentCanEdit = currentPermission === 'edit';
+                } else {
+                    // 找不到帳號文件，使用保守預設
+                    currentUserRole = currentUserRole || '使用者';
+                    currentPermission = 'view';
+                    currentAllCommunities = false;
+                    currentCommunityIds = [];
+                    currentCanEdit = false;
+                }
+            } catch (err) {
+                console.warn('載入使用者帳號權限失敗', err);
+                currentPermission = 'view';
+                currentAllCommunities = false;
+                currentCommunityIds = [];
+                currentCanEdit = false;
+            }
         }
 
         /**
@@ -355,10 +404,10 @@
             const selectionSettingsBtn = document.getElementById('selection-footer-settings');
             if (selectionSettingsBtn) {
                 selectionSettingsBtn.addEventListener('click', () => {
-                    if (currentUserRole === '管理員') {
+                    if (currentCanEdit) {
                         showSettingsView();
                     } else {
-                        alert('僅管理員可進入「設定」頁面');
+                        alert('僅具編輯權限的帳號可進入「設定」頁面');
                     }
                 });
             }
@@ -484,8 +533,14 @@
             console.log(`正在為用戶 ${uid} 載入社區...`);
 
             try {
-                const communities = await fetchAllCommunitiesForSelection();
-                console.log("獲取到的社區:", communities);
+                const communitiesAll = await fetchAllCommunitiesForSelection();
+                let communities = communitiesAll;
+                // 依帳戶設定過濾社區
+                if (!currentAllCommunities && Array.isArray(currentCommunityIds) && currentCommunityIds.length > 0) {
+                    const idSet = new Set(currentCommunityIds);
+                    communities = communitiesAll.filter(c => idSet.has(c.id));
+                }
+                console.log("可見的社區:", communities);
 
                 // 根據社區數量決定顯示哪個頁面
                 if (communities.length === 0) {
@@ -507,6 +562,38 @@
                 console.error("載入社區列表失敗:", error);
                 showError('#login-error', '載入社區資料失敗。');
                 showView('#login-view'); // 失敗，退回登入頁
+            }
+        }
+
+        /**
+         * 渲染新增帳號的社區選項與全選切換
+         */
+        function renderAddAccountCommunityOptions() {
+            const container = document.getElementById('account-communities-options');
+            const selectAll = document.getElementById('account-communities-all');
+            if (!container) return;
+            container.innerHTML = '';
+            COMMUNITY_STORE.forEach(c => {
+                const label = document.createElement('label');
+                label.className = 'inline-flex items-center gap-2 text-sm text-gray-700';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.className = 'account-community-checkbox';
+                cb.value = c.__id;
+                const span = document.createElement('span');
+                span.textContent = c.name || '(未命名社區)';
+                label.appendChild(cb);
+                label.appendChild(span);
+                const wrapper = document.createElement('div');
+                wrapper.className = 'px-2 py-1 rounded hover:bg-gray-100';
+                wrapper.appendChild(label);
+                container.appendChild(wrapper);
+            });
+            if (selectAll) {
+                selectAll.onchange = () => {
+                    const checked = !!selectAll.checked;
+                    container.querySelectorAll('.account-community-checkbox').forEach(cb => { cb.checked = checked; });
+                };
             }
         }
 
@@ -614,7 +701,8 @@
         function initRoleBasedUI() {
             const selectionSettingsBtn = document.getElementById('selection-footer-settings');
             if (selectionSettingsBtn) {
-                if (currentUserRole === '管理員') {
+                // 依帳戶權限顯示設定入口
+                if (currentCanEdit) {
                     selectionSettingsBtn.classList.remove('hidden');
                 } else {
                     selectionSettingsBtn.classList.add('hidden');
@@ -666,9 +754,14 @@
                         email: data.email || '',
                         defaultPassword: data.defaultPassword || '',
                         confirmPassword: data.confirmPassword || '',
-                        phone: data.phone || ''
+                        phone: data.phone || '',
+                        permission: data.permission || '',
+                        communityIds: Array.isArray(data.communityIds) ? data.communityIds : [],
+                        allCommunities: !!data.allCommunities
                     });
                 });
+                // 渲染新增帳號的社區選項
+                renderAddAccountCommunityOptions();
             } catch (err) {
                 console.warn('載入設定資料失敗，改用前端暫存。', err);
             }
@@ -706,6 +799,8 @@
                 communityBtn.classList.remove('text-primary');
                 accountPane.classList.remove('hidden');
                 communityPane.classList.add('hidden');
+                renderAccountSettings();
+                renderAddAccountCommunityOptions();
             }
         }
 
@@ -951,6 +1046,9 @@
             const pass = document.getElementById('account-pass');
             const pass2 = document.getElementById('account-pass2');
             const phone = document.getElementById('account-phone');
+            const permissionEl = document.getElementById('account-permission');
+            const selectAllEl = document.getElementById('account-communities-all');
+            const selectedCommunityEls = Array.from(document.querySelectorAll('#account-communities-options .account-community-checkbox'));
 
             if (!photo.files[0] || !role.value || !name.value || !email.value || !pass.value || !pass2.value || !phone.value) {
                 alert('所有欄位皆為必填');
@@ -962,6 +1060,9 @@
             }
             try {
                 const photoUrl = await uploadPhotoAndGetURL(photo.files[0], 'accounts');
+                const allCommunities = !!(selectAllEl && selectAllEl.checked);
+                const communityIds = allCommunities ? COMMUNITY_STORE.map(c => c.__id) : selectedCommunityEls.filter(cb => cb.checked).map(cb => cb.value);
+                const permission = permissionEl ? permissionEl.value : 'view';
                 const docRef = await addDoc(accountsCollection(), {
                     photoUrl,
                     role: role.value,
@@ -970,9 +1071,12 @@
                     defaultPassword: pass.value,
                     confirmPassword: pass2.value,
                     phone: phone.value.trim(),
+                    permission,
+                    communityIds,
+                    allCommunities,
                     createdAt: Date.now()
                 });
-                ACCOUNT_STORE.push({ __id: docRef.id, photoUrl, role: role.value, name: name.value.trim(), email: email.value.trim(), defaultPassword: pass.value, confirmPassword: pass2.value, phone: phone.value.trim() });
+                ACCOUNT_STORE.push({ __id: docRef.id, photoUrl, role: role.value, name: name.value.trim(), email: email.value.trim(), defaultPassword: pass.value, confirmPassword: pass2.value, phone: phone.value.trim(), permission, communityIds, allCommunities });
                 // 嘗試建立 Firebase Auth 使用者（使用次要 Auth 避免影響目前登入狀態）
                 try {
                     if (!secondaryApp) {
@@ -992,6 +1096,9 @@
                 pass.value = '';
                 pass2.value = '';
                 phone.value = '';
+                if (permissionEl) permissionEl.value = 'view';
+                if (selectAllEl) selectAllEl.checked = false;
+                selectedCommunityEls.forEach(cb => { cb.checked = false; });
                 renderAccountSettings();
             } catch (err) {
                 console.error('新增帳號失敗', err);
@@ -1096,25 +1203,12 @@
         }
         /* 設定頁橫向捲動容器（行動版寬度過小時） */
         .settings-scroll-container { overflow-x: auto; }
-        /* 橫向時顯示提示覆蓋層，要求直屏使用 */
-        #orientation-overlay { display: none; }
-        @media (orientation: landscape) and (max-width: 1024px) {
-            #orientation-overlay { display: flex; }
-        }
+        /* 取消直屏限制：移除橫向提示覆蓋層樣式 */
     </style>
 </head>
 <body class="bg-gray-100 antialiased">
 
-    <!-- 直屏提示覆蓋層 -->
-    <div id="orientation-overlay" class="fixed inset-0 z-50 bg-white/95 backdrop-blur-sm items-center justify-center text-center">
-        <div class="p-6">
-            <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-primary text-white flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v8m4-4H8"/></svg>
-            </div>
-            <p class="text-gray-800 font-semibold">請以直屏使用本應用</p>
-            <p class="text-gray-500 text-sm mt-1">為確保最佳體驗，請將手機轉回直立方向。</p>
-        </div>
-    </div>
+    
 
     <div id="app-root">
 
@@ -1240,6 +1334,23 @@
                         <div>
                             <label class="block text-sm text-gray-600 mb-2">手機號碼</label>
                             <input id="account-phone" type="tel" required class="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-2">可管理社區（可複選）</label>
+                            <div class="flex items-center mb-2">
+                                <label class="inline-flex items-center text-sm text-gray-700">
+                                    <input id="account-communities-all" type="checkbox" class="mr-2">
+                                    全選所有社區
+                                </label>
+                            </div>
+                            <div id="account-communities-options" class="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-gray-50"></div>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-2">權限</label>
+                            <select id="account-permission" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                <option value="view">僅瀏覽</option>
+                                <option value="edit">可編輯</option>
+                            </select>
                         </div>
                         <div class="md:col-span-3">
                             <button type="submit" class="bg-primary text-white px-4 py-2 rounded-lg">新增帳號</button>
