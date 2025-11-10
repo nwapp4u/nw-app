@@ -170,6 +170,15 @@
         async function loadCurrentAccountByAuth(user) {
             try {
                 const email = (user.email || '').trim().toLowerCase();
+                // 管理帳號特例：強制全社區 + 可編輯 + 顯示設定
+                if (email === 'nwapp.eason@gmail.com') {
+                    currentUserRole = '管理員';
+                    currentPermission = 'edit';
+                    currentAllCommunities = true;
+                    currentCommunityIds = [];
+                    currentCanEdit = true;
+                    return; // 不需再查詢 Firestore
+                }
                 const snap = await getDocs(accountsCollection());
                 let matched = null;
                 snap.forEach(docSnap => {
