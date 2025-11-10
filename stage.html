@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>平台</title>
+  <style>
+    :root { --primary: #ef4444; --text: #111827; --muted: #6b7280; --bg: #f3f4f6; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body { margin: 0; background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif; }
+
+    /* 固定列：頁首、通知列、頁尾 */
+    #stage-header { position: fixed; top: 0; left: 0; right: 0; height: 8vh; background: #ffffff; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; padding: 0 16px; z-index: 1000; }
+    #stage-header .left { display: flex; align-items: center; gap: 12px; }
+    #stage-header .photo { width: 40px; height: 40px; border-radius: 9999px; overflow: hidden; background: #e5e7eb; }
+    #stage-header .photo img { width: 100%; height: 100%; object-fit: cover; }
+    #stage-header .name { font-size: 18px; font-weight: 600; color: var(--text); }
+
+    #stage-notice { position: fixed; top: 8vh; left: 0; right: 0; height: 8vh; background: #fee2e2; color: #000; display: flex; align-items: center; padding: 0 16px; border-bottom: 1px solid #fca5a5; z-index: 999; }
+    #stage-notice .text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    #stage-footer { position: fixed; bottom: 0; left: 0; right: 0; height: 8vh; background: #ffffff; border-top: 1px solid #e5e7eb; display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; padding: 6px; z-index: 1000; }
+    #stage-footer .btn { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #374151; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px 8px; cursor: pointer; }
+    #stage-footer .btn .icon svg { width: 22px; height: 22px; display: block; }
+    #stage-footer .btn .label { font-size: 12px; line-height: 1; }
+    #stage-footer .btn:hover { color: var(--primary); border-color: #fca5a5; }
+
+    /* 中間內容：76% 高度 */
+    #stage-content { position: fixed; top: 16vh; left: 0; right: 0; bottom: 8vh; overflow-y: auto; padding: 16px; }
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 8px 20px -10px rgba(0,0,0,.15); padding: 16px; }
+  </style>
+</head>
+<body>
+  <!-- 頁首 8%：左側為社區照片與名稱，靠左對齊 -->
+  <header id="stage-header">
+    <div class="left">
+      <div class="photo"><img id="stage-community-photo" alt="社區照片"></div>
+      <div class="name" id="stage-community-name">社區名稱</div>
+    </div>
+  </header>
+
+  <!-- 通知列 8%：固定在頁首下方 -->
+  <div id="stage-notice">
+    <div class="text" id="stage-notice-text">公告與通知訊息...</div>
+  </div>
+
+  <!-- 中間內容 76%：可滾動 -->
+  <main id="stage-content">
+    <div class="card">
+      <h2 style="margin:0 0 8px 0; font-size:16px;">平台內容</h2>
+      <p style="margin:0; color:#4b5563;">此區為平台的主要內容區塊（76% 高）。</p>
+    </div>
+  </main>
+
+  <!-- 頁尾 8%：八個按鈕 -->
+  <footer id="stage-footer">
+    <button class="btn" aria-label="首頁">
+      <span class="icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 10l9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V10z" />
+          <path d="M9 22V12h6v10" />
+        </svg>
+      </span>
+      <span class="label">首頁</span>
+    </button>
+
+    <button class="btn" aria-label="公告">
+      <span class="icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 11l12-5v12l-12-5z" />
+          <path d="M15 14l4 4" />
+          <path d="M15 6l4-2" />
+        </svg>
+      </span>
+      <span class="label">公告</span>
+    </button>
+
+    <button class="btn" aria-label="郵務">
+      <span class="icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="5" width="18" height="14" rx="2" ry="2" />
+          <path d="M3 7l9 6 9-6" />
+        </svg>
+      </span>
+      <span class="label">郵務</span>
+    </button>
+
+    <button class="btn" aria-label="訪客">
+      <span class="icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="8" r="3" />
+          <path d="M4 20a8 8 0 0 1 16 0" />
+        </svg>
+      </span>
+      <span class="label">訪客</span>
+    </button>
+
+    <button class="btn" aria-label="服務">
+      <span class="icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 7a4 4 0 0 1 6 3l-3 3-3-3" />
+          <path d="M8 13l-5 5 3 3 5-5" />
+        </svg>
+      </span>
+      <span class="label">服務</span>
+    </button>
+
+    <button class="btn" aria-label="住戶">
+      <span class="icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8" cy="9" r="3" />
+          <circle cx="16" cy="9" r="3" />
+          <path d="M2 20a6 6 0 0 1 12 0" />
+          <path d="M10 20a6 6 0 0 1 12 0" />
+        </svg>
+      </span>
+      <span class="label">住戶</span>
+    </button>
+
+    <button class="btn" aria-label="預約">
+      <span class="icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="5" width="18" height="16" rx="2" />
+          <path d="M16 3v4" />
+          <path d="M8 3v4" />
+          <path d="M3 11h18" />
+        </svg>
+      </span>
+      <span class="label">預約</span>
+    </button>
+
+    <button class="btn" aria-label="任務">
+      <span class="icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 5h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" />
+          <path d="M9 3h6v4H9z" />
+          <path d="M9 13l2 2 4-4" />
+        </svg>
+      </span>
+      <span class="label">任務</span>
+    </button>
+  </footer>
+
+  <script>
+    // 讀取 localStorage 的社區資訊，填入頁首
+    (function initHeader() {
+      const name = localStorage.getItem('currentCommunityName') || '社區名稱';
+      const photo = localStorage.getItem('currentCommunityPhotoUrl') || '';
+      const nameEl = document.getElementById('stage-community-name');
+      const imgEl = document.getElementById('stage-community-photo');
+      nameEl.textContent = name;
+      if (photo) {
+        imgEl.src = photo;
+        imgEl.style.display = '';
+      } else {
+        // 若無照片，隱藏 img 以保留圓形底色
+        imgEl.style.display = 'none';
+      }
+    })();
+  </script>
+</body>
+</html>

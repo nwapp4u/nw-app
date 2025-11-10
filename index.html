@@ -445,6 +445,27 @@
                     showView('#community-selection-view');
                 });
             }
+            // 平台頁的「社區」按鈕：選取可見的第一個社區，存入 localStorage 後導向 stage.html
+            const platformToStageBtn = document.getElementById('platform-to-stage');
+            if (platformToStageBtn) {
+                platformToStageBtn.addEventListener('click', async () => {
+                    const communitiesAll = await fetchAllCommunitiesForSelection();
+                    let communitiesToShow = communitiesAll;
+                    if (!currentAllCommunities && Array.isArray(currentCommunityIds) && currentCommunityIds.length > 0) {
+                        const idSet = new Set(currentCommunityIds);
+                        communitiesToShow = communitiesAll.filter(c => idSet.has(c.id));
+                    }
+                    const target = communitiesToShow[0] || communitiesAll[0] || null;
+                    if (target) {
+                        try {
+                            localStorage.setItem('currentCommunityId', target.id || '');
+                            localStorage.setItem('currentCommunityName', target.name || '社區名稱');
+                            localStorage.setItem('currentCommunityPhotoUrl', target.photoUrl || '');
+                        } catch (e) { /* 忽略 localStorage 例外 */ }
+                    }
+                    window.location.href = 'stage.html';
+                });
+            }
             // 平台頁的頁尾「設定」按鈕
             const platformFooterSettingsBtn = document.getElementById('platform-footer-settings');
             if (platformFooterSettingsBtn) {
@@ -1618,9 +1639,11 @@
             <h1 class="text-2xl font-bold text-primary">平台</h1>
             <button id="platform-logout-button" class="text-sm text-gray-600 hover:text-primary transition-colors">登出</button>
         </header>
-        <!-- 清單 -->
+        <!-- 內容：僅顯示「社區」按鈕，點擊導向 stage.html -->
         <main class="flex-grow p-4 space-y-4 overflow-y-auto">
-            <div id="platform-list"></div>
+            <div class="w-full flex items-center justify-center">
+                <button id="platform-to-stage" class="px-4 py-2 bg-primary text-white rounded-lg">社區</button>
+            </div>
         </main>
         <!-- 頁尾 (導航欄 Tab Bar) -->
         <footer class="bg-white border-t border-gray-200 shadow-[0_-4px_10px_-5px_rgba(0,0,0,0.05)] flex items-center justify-around p-2 flex-shrink-0">
