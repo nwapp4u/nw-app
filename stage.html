@@ -11,28 +11,28 @@
     body { margin: 0; background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', sans-serif; }
 
     /* 固定列：頁首、通知列、頁尾 */
-    #stage-header { position: fixed; top: 0; left: 0; right: 0; height: 8vh; background: #ffffff; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; padding: 0 16px; z-index: 1000; }
+    #stage-header { position: fixed; top: 0; left: 0; right: 0; height: 12vh; background: #ffffff; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; padding: 0 16px; z-index: 1000; }
     #stage-header .left { display: flex; align-items: center; gap: 12px; }
     #stage-header .photo { width: 40px; height: 40px; border-radius: 9999px; overflow: hidden; background: #e5e7eb; }
     #stage-header .photo img { width: 100%; height: 100%; object-fit: cover; }
     #stage-header .name { font-size: 18px; font-weight: 600; color: var(--text); }
 
-    #stage-notice { position: fixed; top: 8vh; left: 0; right: 0; height: 8vh; background: #fee2e2; color: #000; display: flex; align-items: center; padding: 0 16px; border-bottom: 1px solid #fca5a5; z-index: 999; }
+    #stage-notice { position: fixed; top: 12vh; left: 0; right: 0; height: 10vh; background: #fee2e2; color: #000; display: flex; align-items: center; padding: 0 16px; border-bottom: 1px solid #fca5a5; z-index: 999; }
     #stage-notice .text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-    #stage-footer { position: fixed; bottom: 0; left: 0; right: 0; height: 8vh; background: #ffffff; border-top: 1px solid #e5e7eb; display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; padding: 6px; z-index: 1000; }
+    #stage-footer { position: fixed; bottom: 0; left: 0; right: 0; height: 12vh; background: #ffffff; border-top: 1px solid #e5e7eb; display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; padding: 6px; z-index: 1000; }
     #stage-footer .btn { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #374151; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px 8px; cursor: pointer; }
     #stage-footer .btn .icon svg { width: 22px; height: 22px; display: block; }
     #stage-footer .btn .label { font-size: 12px; line-height: 1; }
     #stage-footer .btn:hover { color: var(--primary); border-color: #fca5a5; }
 
-    /* 中間內容：76% 高度 */
-    #stage-content { position: fixed; top: 16vh; left: 0; right: 0; bottom: 8vh; overflow-y: auto; padding: 16px; }
+    /* 中間內容：66% 高度 */
+    #stage-content { position: fixed; top: 22vh; left: 0; right: 0; bottom: 12vh; overflow-y: auto; padding: 16px; }
     .card { background: #fff; border-radius: 12px; box-shadow: 0 8px 20px -10px rgba(0,0,0,.15); padding: 16px; }
   </style>
 </head>
 <body>
-  <!-- 頁首 8%：左側為社區照片與名稱，靠左對齊 -->
+  <!-- 頁首 12%：左側為社區照片與名稱，靠左對齊 -->
   <header id="stage-header">
     <div class="left">
       <div class="photo"><img id="stage-community-photo" alt="社區照片"></div>
@@ -40,20 +40,20 @@
     </div>
   </header>
 
-  <!-- 通知列 8%：固定在頁首下方 -->
+  <!-- 通知列 10%：固定在頁首下方 -->
   <div id="stage-notice">
     <div class="text" id="stage-notice-text">公告與通知訊息...</div>
   </div>
 
-  <!-- 中間內容 76%：可滾動 -->
+  <!-- 中間內容 66%：可滾動 -->
   <main id="stage-content">
     <div class="card">
       <h2 style="margin:0 0 8px 0; font-size:16px;">平台內容</h2>
-      <p style="margin:0; color:#4b5563;">此區為平台的主要內容區塊（76% 高）。</p>
+      <p style="margin:0; color:#4b5563;">此區為平台的主要內容區塊（66% 高）。</p>
     </div>
   </main>
 
-  <!-- 頁尾 8%：八個按鈕 -->
+  <!-- 頁尾 12%：八個按鈕 -->
   <footer id="stage-footer">
     <button class="btn" aria-label="首頁">
       <span class="icon">
