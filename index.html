@@ -721,7 +721,12 @@
                     </svg>
                 `;
                 item.addEventListener('click', () => {
-                    showCommunityPage(community);
+                    try {
+                        localStorage.setItem('currentCommunityId', community.id || '');
+                        localStorage.setItem('currentCommunityName', community.name || '社區名稱');
+                        localStorage.setItem('currentCommunityPhotoUrl', community.photoUrl || '');
+                    } catch (e) { /* 忽略 localStorage 例外 */ }
+                    window.location.href = 'stage.html';
                 });
                 listElement.appendChild(item);
             });
@@ -1639,11 +1644,9 @@
             <h1 class="text-2xl font-bold text-primary">平台</h1>
             <button id="platform-logout-button" class="text-sm text-gray-600 hover:text-primary transition-colors">登出</button>
         </header>
-        <!-- 內容：僅顯示「社區」按鈕，點擊導向 stage.html -->
+        <!-- 內容：平台社區清單，點擊導向 stage.html -->
         <main class="flex-grow p-4 space-y-4 overflow-y-auto">
-            <div class="w-full flex items-center justify-center">
-                <button id="platform-to-stage" class="px-4 py-2 bg-primary text-white rounded-lg">社區</button>
-            </div>
+            <div id="platform-list" class="space-y-3"></div>
         </main>
         <!-- 頁尾 (導航欄 Tab Bar) -->
         <footer class="bg-white border-t border-gray-200 shadow-[0_-4px_10px_-5px_rgba(0,0,0,0.05)] flex items-center justify-around p-2 flex-shrink-0">
