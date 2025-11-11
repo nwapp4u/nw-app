@@ -757,6 +757,9 @@
             const adB = document.getElementById('ad-b-img');
             if (adB) adB.src = makeSvgPlaceholder(1000, 200, `${community.name} 廣告B`);
             
+            // 套用 A/B 按鈕設定（社區自訂，無則回退預設）
+            applyCommunityButtonSettings(community.__id);
+
             // 顯示社區主頁
             showView('#community-page-view');
         }
@@ -779,6 +782,106 @@
                 `<text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="${fg}" font-family="Inter, Noto Sans TC, Arial" font-size="${Math.round(h/6)}">${text}</text>` +
                 `</svg>`;
             return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+        }
+
+        /**
+         * 載入指定社區的 A/B 按鈕設定，無設定時回退到預設
+         */
+        async function loadButtonSettingsForCommunity(communityId) {
+            // 讀取預設
+            let defA = [], defB = [];
+            try {
+                const defSnap = await getDoc(appButtonDefaultsDoc());
+                if (defSnap.exists()) {
+                    const d = defSnap.data();
+                    defA = Array.isArray(d.A) ? d.A : [];
+                    defB = Array.isArray(d.B) ? d.B : [];
+                }
+            } catch (e) { /* 忽略錯誤，保持空陣列 */ }
+
+            // 讀取社區自訂
+            let a = defA.slice(0,8), b = defB.slice(0,8);
+            try {
+                if (communityId) {
+                    const cSnap = await getDoc(communityDoc(communityId));
+                    if (cSnap.exists()) {
+                        const data = cSnap.data();
+                        const bs = data.buttonSettings || {};
+                        const mix = (base, override) => {
+                            const out = [];
+                            for (let i = 0; i < 8; i++) {
+                                out[i] = { name:'', imageUrl:'', linkType:'internal', linkTarget:'', ...(base[i]||{}), ...(override?.[i]||{}) };
+                            }
+                            return out;
+                        };
+                        a = mix(defA, bs.A);
+                        b = mix(defB, bs.B);
+                    }
+                }
+            } catch (e) { /* 忽略錯誤，維持 def */ }
+
+            // 正規化長度 8
+            const norm = (arr) => {
+                const base = Array.isArray(arr) ? arr.slice(0,8) : [];
+                while (base.length < 8) base.push({ name:'', imageUrl:'', linkType:'internal', linkTarget:'' });
+                return base.map(it => ({
+                    name: it?.name || '',
+                    imageUrl: it?.imageUrl || '',
+                    linkType: it?.linkType === 'external' ? 'external' : 'internal',
+                    linkTarget: it?.linkTarget || ''
+                }));
+            };
+            return { A: norm(a), B: norm(b) };
+        }
+
+        /**
+         * 渲染 A/B 按鈕到社區主頁
+         */
+        async function applyCommunityButtonSettings(communityId) {
+            const gridA1 = document.getElementById('community-buttons-A-row1');
+            const gridA2 = document.getElementById('community-buttons-A-row2');
+            const gridB1 = document.getElementById('community-buttons-B-row1');
+            const gridB2 = document.getElementById('community-buttons-B-row2');
+            if (!gridA1 || !gridA2 || !gridB1 || !gridB2) return;
+
+            const bs = await loadButtonSettingsForCommunity(communityId);
+
+            const renderRow = (container, items) => {
+                container.innerHTML = '';
+                items.forEach((it, idx) => {
+                    const btn = document.createElement('button');
+                    btn.className = 'bg-primary text-white rounded flex flex-col items-center justify-center gap-1 py-1';
+                    btn.innerHTML = `
+                        ${it.imageUrl ? `<img src="${it.imageUrl}" class="w-8 h-8 object-contain" onerror="this.style.display='none'" />` : ''}
+                        <span class="text-xs">${it.name || `A${idx+1}`}</span>
+                    `;
+                    btn.addEventListener('click', () => handleButtonLink(it));
+                    container.appendChild(btn);
+                });
+            };
+
+            renderRow(gridA1, bs.A.slice(0,4));
+            renderRow(gridA2, bs.A.slice(4,8));
+            renderRow(gridB1, bs.B.slice(0,4));
+            renderRow(gridB2, bs.B.slice(4,8));
+        }
+
+        /**
+         * 依設定開啟連結：內部(#viewId 或相對路徑)／外部(http/https)
+         */
+        function handleButtonLink(it) {
+            const t = (it?.linkTarget || '').trim();
+            const type = it?.linkType === 'external' ? 'external' : 'internal';
+            if (!t) return;
+            if (type === 'external') {
+                try { window.open(t, '_blank'); } catch (_) { window.location.href = t; }
+            } else {
+                if (t.startsWith('#')) {
+                    showView(t);
+                } else {
+                    window.location.href = t; // 內部檔案或路徑
+                }
+            }
         }
 
         /**
@@ -1756,18 +1859,8 @@
             <!-- 按鈕A 20%：文字第一列靠左，第二列4按鈕，第三列4按鈕 -->
             <section class="h-[20vh] bg-gray-50 px-4 py-0 border-b border-gray-200">
                 <div class="h-[4vh] flex items-center text-gray-800 font-semibold">社區服務</div>
-                <div class="h-[8vh] grid grid-cols-4 gap-3">
-                    <button class="bg-primary text-white py-2 rounded">A1</button>
-                    <button class="bg-primary text-white py-2 rounded">A2</button>
-                    <button class="bg-primary text-white py-2 rounded">A3</button>
-                    <button class="bg-primary text-white py-2 rounded">A4</button>
-                </div>
-                <div class="h-[8vh] grid grid-cols-4 gap-3">
-                    <button class="bg-primary/80 text-white py-2 rounded">A5</button>
-                    <button class="bg-primary/80 text-white py-2 rounded">A6</button>
-                    <button class="bg-primary/80 text-white py-2 rounded">A7</button>
-                    <button class="bg-primary/80 text-white py-2 rounded">A8</button>
-                </div>
+                <div id="community-buttons-A-row1" class="h-[8vh] grid grid-cols-4 gap-3"></div>
+                <div id="community-buttons-A-row2" class="h-[8vh] grid grid-cols-4 gap-3"></div>
             </section>
 
             <!-- 廣告B 10%：圖片（使用內嵌 SVG 佔位，避免外部網域） -->
@@ -1778,18 +1871,8 @@
             <!-- 按鈕B 20%：文字第一列靠左，第二列4按鈕，第三列4按鈕 -->
             <section class="h-[20vh] bg-gray-50 px-4 py-0">
                 <div class="h-[4vh] flex items-center text-gray-800 font-semibold">生活服務</div>
-                <div class="h-[8vh] grid grid-cols-4 gap-3">
-                    <button class="bg-indigo-600 text-white py-2 rounded">B1</button>
-                    <button class="bg-indigo-600 text-white py-2 rounded">B2</button>
-                    <button class="bg-indigo-600 text-white py-2 rounded">B3</button>
-                    <button class="bg-indigo-600 text-white py-2 rounded">B4</button>
-                </div>
-                <div class="h-[8vh] grid grid-cols-4 gap-3">
-                    <button class="bg-indigo-500 text-white py-2 rounded">B5</button>
-                    <button class="bg-indigo-500 text-white py-2 rounded">B6</button>
-                    <button class="bg-indigo-500 text-white py-2 rounded">B7</button>
-                    <button class="bg-indigo-500 text-white py-2 rounded">B8</button>
-                </div>
+                <div id="community-buttons-B-row1" class="h-[8vh] grid grid-cols-4 gap-3"></div>
+                <div id="community-buttons-B-row2" class="h-[8vh] grid grid-cols-4 gap-3"></div>
             </section>
         </main>
 
