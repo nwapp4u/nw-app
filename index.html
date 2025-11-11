@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>西北社區APP</title>
+    <title>西北社區PP</title>
     <!-- 載入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- 載入 Inter 字體 -->
@@ -30,11 +30,11 @@
             getFirestore, 
             doc, 
             getDoc,
-            setDoc,
             setLogLevel,
             collection,
             getDocs,
             addDoc,
+            setDoc,
             updateDoc,
             deleteDoc
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -63,11 +63,6 @@
         // 設定頁資料來源（將以 Firestore 為主，失敗時可維持空陣列）
         const COMMUNITY_STORE = [];
         const ACCOUNT_STORE = [];
-        // 預設按鈕設定（A/B 各 8 筆），社區未設定時使用
-        let BUTTON_DEFAULTS = {
-          A: Array(8).fill(null).map(() => ({ name: '', imageUrl: '', linkType: 'internal', linkTarget: '' })),
-          B: Array(8).fill(null).map(() => ({ name: '', imageUrl: '', linkType: 'internal', linkTarget: '' }))
-        };
         
         // 模擬資料已不再使用；社區列表改為從 Firestore 讀取
 
@@ -467,7 +462,6 @@
                             localStorage.setItem('currentCommunityId', target.id || '');
                             localStorage.setItem('currentCommunityName', target.name || '社區名稱');
                             localStorage.setItem('currentCommunityPhotoUrl', target.photoUrl || '');
-                            localStorage.setItem('currentButtonGroup', 'A');
                         } catch (e) { /* 忽略 localStorage 例外 */ }
                     }
                     window.location.href = 'stage.html';
@@ -488,7 +482,6 @@
             // 設定頁子分頁按鈕與表單
             const subtabCommunityBtn = document.getElementById('subtab-community-btn');
             const subtabAccountBtn = document.getElementById('subtab-account-btn');
-            const subtabButtonBtn = document.getElementById('subtab-button-btn');
             if (subtabCommunityBtn) {
                 subtabCommunityBtn.addEventListener('click', () => {
                     activateSettingsTab('community');
@@ -499,12 +492,6 @@
                 subtabAccountBtn.addEventListener('click', () => {
                     activateSettingsTab('account');
                     renderAccountSettings();
-                });
-            }
-            if (subtabButtonBtn) {
-                subtabButtonBtn.addEventListener('click', () => {
-                    activateSettingsTab('button');
-                    renderButtonSettings();
                 });
             }
 
@@ -739,7 +726,6 @@
                         localStorage.setItem('currentCommunityId', community.id || '');
                         localStorage.setItem('currentCommunityName', community.name || '社區名稱');
                         localStorage.setItem('currentCommunityPhotoUrl', community.photoUrl || '');
-                        localStorage.setItem('currentButtonGroup', 'A');
                     } catch (e) { /* 忽略 localStorage 例外 */ }
                     window.location.href = 'stage.html';
                 });
@@ -835,72 +821,33 @@
         function accountsCollection() {
             return collection(db, 'artifacts', appId, 'accounts');
         }
+        function buttonSettingsCollection() {
+            return collection(db, 'artifacts', appId, 'buttonSettings');
+        }
         function communityDoc(id) {
             return doc(db, 'artifacts', appId, 'communities', id);
         }
         function accountDoc(id) {
             return doc(db, 'artifacts', appId, 'accounts', id);
         }
-        // 預設按鈕設定文件位置
-        function appButtonDefaultsDoc() {
-            return doc(db, 'artifacts', appId, 'settings', 'buttonDefaults');
+        function buttonSettingsDoc(id) {
+            return doc(db, 'artifacts', appId, 'buttonSettings', id);
         }
 
         // 載入設定頁資料（社區與帳號）
         async function loadSettingsData() {
             try {
-                // 載入預設按鈕設定（若不存在則維持本地預設）
-                try {
-                    const defSnap = await getDoc(appButtonDefaultsDoc());
-                    if (defSnap.exists()) {
-                        const defData = defSnap.data() || {};
-                        const norm = (arr) => {
-                            const base = Array.isArray(arr) ? arr.slice(0, 8) : [];
-                            while (base.length < 8) base.push({ name: '', imageUrl: '', linkType: 'internal', linkTarget: '' });
-                            return base.map(it => ({
-                                name: it?.name || '',
-                                imageUrl: it?.imageUrl || '',
-                                linkType: it?.linkType === 'external' ? 'external' : 'internal',
-                                linkTarget: it?.linkTarget || ''
-                            }));
-                        };
-                        BUTTON_DEFAULTS = {
-                            A: norm(defData.A),
-                            B: norm(defData.B)
-                        };
-                    }
-                } catch (e) {
-                    console.warn('讀取預設按鈕設定失敗（沿用本地預設）:', e);
-                }
                 // 讀取社區
                 const commSnap = await getDocs(communitiesCollection());
                 COMMUNITY_STORE.length = 0;
                 commSnap.forEach(docSnap => {
                     const data = docSnap.data();
-                    const defaultItem = { name: '', imageUrl: '', linkType: 'internal', linkTarget: '' };
-                    const ensureArray8 = (arr) => {
-                        const base = Array.isArray(arr) ? arr.slice(0, 8) : [];
-                        while (base.length < 8) base.push({ ...defaultItem });
-                        return base.map(it => ({
-                            name: it?.name || '',
-                            imageUrl: it?.imageUrl || '',
-                            linkType: it?.linkType === 'external' ? 'external' : 'internal',
-                            linkTarget: it?.linkTarget || ''
-                        }));
-                    };
-                    const btnSettings = data.buttonSettings || {};
-                    const arrA = (Array.isArray(btnSettings.A) && btnSettings.A.length) ? btnSettings.A : BUTTON_DEFAULTS.A;
-                    const arrB = (Array.isArray(btnSettings.B) && btnSettings.B.length) ? btnSettings.B : BUTTON_DEFAULTS.B;
                     COMMUNITY_STORE.push({
                         __id: docSnap.id,
                         photoUrl: data.photoUrl || '',
                         code: data.code || '',
                         name: data.name || '',
-                        population: data.population || 0,
-                        buttonSettings: {
-                            A: ensureArray8(arrA),
-                            B: ensureArray8(arrB)
-                        }
+                        population: data.population || 0
                     });
                 });
 
@@ -973,32 +920,27 @@
         function activateSettingsTab(tab) {
             const communityBtn = document.getElementById('subtab-community-btn');
             const accountBtn = document.getElementById('subtab-account-btn');
-            const buttonBtn = document.getElementById('subtab-button-btn');
+            const buttonsBtn = document.getElementById('subtab-buttons-btn');
             const communityPane = document.getElementById('community-settings-pane');
             const accountPane = document.getElementById('account-settings-pane');
-            const buttonPane = document.getElementById('button-settings-pane');
+            const buttonsPane = document.getElementById('button-settings-pane');
 
-            if (!communityBtn || !accountBtn || !buttonBtn || !communityPane || !accountPane || !buttonPane) return;
+            if (!communityBtn || !accountBtn || !buttonsBtn || !communityPane || !accountPane || !buttonsPane) return;
 
-            // 清除狀態
-            communityBtn.classList.remove('text-primary');
-            accountBtn.classList.remove('text-primary');
-            buttonBtn.classList.remove('text-primary');
-            communityPane.classList.add('hidden');
-            accountPane.classList.add('hidden');
-            buttonPane.classList.add('hidden');
+            const setActive = (btn, pane, active) => {
+                if (active) { btn.classList.add('text-primary'); pane.classList.remove('hidden'); }
+                else { btn.classList.remove('text-primary'); pane.classList.add('hidden'); }
+            };
 
-            if (tab === 'community') {
-                communityBtn.classList.add('text-primary');
-                communityPane.classList.remove('hidden');
-            } else if (tab === 'account') {
-                accountBtn.classList.add('text-primary');
-                accountPane.classList.remove('hidden');
+            setActive(communityBtn, communityPane, tab === 'community');
+            setActive(accountBtn, accountPane, tab === 'account');
+            setActive(buttonsBtn, buttonsPane, tab === 'buttons');
+
+            if (tab === 'account') {
                 renderAccountSettings();
                 renderAddAccountCommunityOptions();
-            } else if (tab === 'button') {
-                buttonBtn.classList.add('text-primary');
-                buttonPane.classList.remove('hidden');
+            } else if (tab === 'buttons') {
+                renderButtonSettings();
             }
         }
 
@@ -1274,159 +1216,6 @@
         }
 
         /**
-         * 渲染「按鈕設定」：提供社區選擇、A/B 頁切換，每頁 8 個項目（圖片、名稱、連結）
-         */
-        function renderButtonSettings() {
-            const selectEl = document.getElementById('button-settings-community-select');
-            const listEl = document.getElementById('button-settings-list');
-            const btnA = document.getElementById('button-settings-group-a');
-            const btnB = document.getElementById('button-settings-group-b');
-            const saveBtn = document.getElementById('button-settings-save');
-            if (!selectEl || !listEl || !btnA || !btnB || !saveBtn) return;
-
-            // 初始化社區下拉選單（只在首次或社區變更時更新）
-            // 重建社區下拉（包含「預設設定」）
-            selectEl.innerHTML = '';
-            const defOpt = document.createElement('option');
-            defOpt.value = '__default__';
-            defOpt.textContent = '預設設定（未設定社區使用）';
-            selectEl.appendChild(defOpt);
-            COMMUNITY_STORE.forEach((c, i) => {
-                const opt = document.createElement('option');
-                opt.value = c.__id || `local-${i}`;
-                opt.textContent = c.name || c.code || `社區${i + 1}`;
-                selectEl.appendChild(opt);
-            });
-
-            // 保留目前 A/B 狀態（暫存於 DOM dataset）
-            const group = (btnA.dataset.active === 'true') ? 'A' : (btnB.dataset.active === 'true') ? 'B' : 'A';
-            // 初始為 A
-            if (!btnA.dataset.initialized) {
-                btnA.dataset.initialized = 'true';
-                btnA.dataset.active = 'true';
-            }
-            // 依據 A/B 切換樣式
-            const setGroupUI = (g) => {
-                if (g === 'A') {
-                    btnA.className = 'px-3 py-2 rounded-lg bg-primary text-white';
-                    btnB.className = 'px-3 py-2 rounded-lg bg-gray-200 text-gray-700';
-                    btnA.dataset.active = 'true';
-                    btnB.dataset.active = 'false';
-                } else {
-                    btnB.className = 'px-3 py-2 rounded-lg bg-primary text-white';
-                    btnA.className = 'px-3 py-2 rounded-lg bg-gray-200 text-gray-700';
-                    btnA.dataset.active = 'false';
-                    btnB.dataset.active = 'true';
-                }
-            };
-            setGroupUI(group);
-
-            // 找到選定社區資料
-            const selectedId = selectEl.value || '__default__';
-            const isDefault = selectedId === '__default__';
-            const community = isDefault ? null : (COMMUNITY_STORE.find(c => c.__id === selectedId) || COMMUNITY_STORE[0]);
-            if (!isDefault && !community) {
-                listEl.innerHTML = '<div class="text-gray-500">尚無社區資料，請先新增社區，或選擇「預設設定」。</div>';
-                return;
-            }
-            // 取得項目來源（預設或社區）
-            const defaultItem = { name: '', imageUrl: '', linkType: 'internal', linkTarget: '' };
-            const items = (() => {
-                if (isDefault) {
-                    const arr = group === 'A' ? BUTTON_DEFAULTS.A : BUTTON_DEFAULTS.B;
-                    while (arr.length < 8) arr.push({ ...defaultItem });
-                    return arr;
-                } else {
-                    if (!community.buttonSettings) community.buttonSettings = { A: Array(8).fill(defaultItem), B: Array(8).fill(defaultItem) };
-                    const arr = group === 'A' ? community.buttonSettings.A : community.buttonSettings.B;
-                    while (arr.length < 8) arr.push({ ...defaultItem });
-                    return arr;
-                }
-            })();
-            while (items.length < 8) items.push({ ...defaultItem });
-
-            // 渲染 8 列
-            listEl.innerHTML = '';
-            items.forEach((it, idx) => {
-                const row = document.createElement('div');
-                row.className = 'grid grid-cols-[96px,1fr,1fr,2fr] gap-4 items-center bg-white p-4 rounded-lg shadow-sm';
-                const idPrefix = `btn-${group}-${idx}`;
-                row.innerHTML = `
-                    <div class="flex flex-col items-center gap-1">
-                        <div class="w-20 h-20 rounded bg-gray-100 overflow-hidden" id="${idPrefix}-preview">${it.imageUrl ? `<img src="${it.imageUrl}" class="w-full h-full object-cover" onerror="this.style.display='none'" />` : ''}</div>
-                        <input type="file" accept="image/*" id="${idPrefix}-file" class="text-xs" />
-                    </div>
-                    <input class="border rounded px-2 py-1" id="${idPrefix}-name" value="${it.name || ''}" placeholder="按鈕名稱" />
-                    <select class="border rounded px-2 py-1" id="${idPrefix}-type">
-                        <option value="internal" ${it.linkType !== 'external' ? 'selected' : ''}>內部</option>
-                        <option value="external" ${it.linkType === 'external' ? 'selected' : ''}>外部</option>
-                    </select>
-                    <input class="border rounded px-2 py-1" id="${idPrefix}-target" value="${it.linkTarget || ''}" placeholder="例如: /stage.html 或 https://..." />
-                `;
-                listEl.appendChild(row);
-
-                const fileInput = row.querySelector(`#${idPrefix}-file`);
-                const previewEl = row.querySelector(`#${idPrefix}-preview`);
-                fileInput?.addEventListener('change', () => {
-                    const file = fileInput.files?.[0];
-                    if (file) {
-                        const url = URL.createObjectURL(file);
-                        previewEl.innerHTML = `<img src="${url}" class="w-full h-full object-cover" />`;
-                        it.__tempFile = file;
-                    }
-                });
-            });
-
-            // 綁定 A/B 切換
-            btnA.onclick = () => { setGroupUI('A'); renderButtonSettings(); };
-            btnB.onclick = () => { setGroupUI('B'); renderButtonSettings(); };
-            // 社區切換
-            selectEl.onchange = () => { renderButtonSettings(); };
-
-            // 儲存目前頁面設定
-            saveBtn.onclick = async () => {
-                try {
-                    const savingGroup = btnA.dataset.active === 'true' ? 'A' : 'B';
-                    const targetItems = isDefault
-                        ? (savingGroup === 'A' ? BUTTON_DEFAULTS.A : BUTTON_DEFAULTS.B)
-                        : (savingGroup === 'A' ? community.buttonSettings.A : community.buttonSettings.B);
-                    // 讀取 UI 值
-                    for (let idx = 0; idx < 8; idx++) {
-                        const idPrefix = `btn-${savingGroup}-${idx}`;
-                        const nameVal = document.getElementById(`${idPrefix}-name`).value.trim();
-                        const typeVal = document.getElementById(`${idPrefix}-type`).value === 'external' ? 'external' : 'internal';
-                        const targetVal = document.getElementById(`${idPrefix}-target`).value.trim();
-                        let imageUrl = targetItems[idx]?.imageUrl || '';
-                        const tempFile = targetItems[idx]?.__tempFile;
-                        if (tempFile) {
-                            imageUrl = await uploadPhotoAndGetURL(tempFile, 'buttons');
-                            delete targetItems[idx].__tempFile;
-                        }
-                        targetItems[idx] = { name: nameVal, imageUrl, linkType: typeVal, linkTarget: targetVal };
-                    }
-                    // 寫入 Firestore
-                    if (isDefault) {
-                        await setDoc(appButtonDefaultsDoc(), {
-                            A: BUTTON_DEFAULTS.A,
-                            B: BUTTON_DEFAULTS.B
-                        });
-                    } else if (community.__id) {
-                        await updateDoc(communityDoc(community.__id), {
-                            buttonSettings: {
-                                A: community.buttonSettings.A,
-                                B: community.buttonSettings.B
-                            }
-                        });
-                    }
-                    alert('已儲存按鈕設定');
-                } catch (err) {
-                    console.error('儲存按鈕設定失敗', err);
-                    alert('儲存失敗');
-                }
-            };
-        }
-
-        /**
          * 提交新增帳號
          */
         async function handleAddAccountSubmit(e) {
@@ -1636,7 +1425,7 @@
         <div class="h-[10%] bg-white border-b border-gray-200 flex items-center space-x-6 px-4 flex-shrink-0">
             <button id="subtab-community-btn" class="text-gray-700 font-medium">社區設定</button>
             <button id="subtab-account-btn" class="text-gray-700 font-medium">帳號設定</button>
-            <button id="subtab-button-btn" class="text-gray-700 font-medium">按鈕設定</button>
+            <button id="subtab-buttons-btn" class="text-gray-700 font-medium">按鈕設定</button>
         </div>
 
         <!-- 內容 (80%) -->
@@ -1777,33 +1566,31 @@
 
             <!-- 按鈕設定 Pane -->
             <section id="button-settings-pane" class="space-y-4 hidden">
-                <!-- 選擇社區與 A/B 頁切換 -->
-                <div class="bg-white p-4 rounded-xl shadow-md flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div class="flex items-center gap-3">
-                        <label class="text-sm text-gray-600">選擇社區</label>
-                        <select id="button-settings-community-select" class="px-3 py-2 border border-gray-300 rounded-lg min-w-[200px]"></select>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <button id="button-settings-group-a" class="px-3 py-2 rounded-lg bg-primary text-white">A 頁</button>
-                        <button id="button-settings-group-b" class="px-3 py-2 rounded-lg bg-gray-200 text-gray-700">B 頁</button>
-                    </div>
-                </div>
-
-                <!-- 16 個按鈕設定（依 A/B 顯示 8 個） -->
-                <div class="bg-white p-4 rounded-xl shadow-md settings-scroll-container overflow-x-auto">
-                    <div class="min-w-[1200px]">
-                        <div class="grid grid-cols-[96px,1fr,1fr,2fr] gap-4 text-gray-500 text-sm font-medium mb-2">
-                            <div>圖示</div>
-                            <div>名稱</div>
-                            <div>連結類型</div>
-                            <div>連結位置</div>
+                <div class="bg-white p-4 rounded-xl shadow-md">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">按鈕設定</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm text-gray-600 mb-2">選擇社區</label>
+                            <select id="button-settings-community" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                <option value="default">預設</option>
+                            </select>
                         </div>
-                        <div id="button-settings-list" class="space-y-2"></div>
+                        <div class="md:col-span-2 flex items-end justify-end gap-2">
+                            <button id="button-settings-load-default" class="px-3 py-2 bg-gray-200 text-gray-800 rounded">載入預設</button>
+                            <button id="button-settings-save" class="px-3 py-2 bg-primary text-white rounded">儲存本社區設定</button>
+                        </div>
                     </div>
-                </div>
 
-                <div class="bg-white p-4 rounded-xl shadow-md flex items-center justify-end gap-2">
-                    <button id="button-settings-save" class="px-4 py-2 bg-primary text-white rounded-lg">儲存目前頁面設定</button>
+                    <!-- A 區域 -->
+                    <div class="mt-2">
+                        <h4 class="text-md font-medium text-gray-700 mb-2">A 區按鈕（A1–A8）</h4>
+                        <div id="button-settings-grid-A" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+                    </div>
+                    <!-- B 區域 -->
+                    <div class="mt-4">
+                        <h4 class="text-md font-medium text-gray-700 mb-2">B 區按鈕（B1–B8）</h4>
+                        <div id="button-settings-grid-B" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+                    </div>
                 </div>
             </section>
         </main>
@@ -2030,5 +1817,175 @@
 
     </div>
 
+<script>
+(function(){
+  // 取得必要 DOM
+  function qs(id){ return document.getElementById(id); }
+
+  // 若外部尚未定義，補上預設按鈕設定文件位置方法
+  if (typeof window.appButtonDefaultsDoc !== 'function') {
+    window.appButtonDefaultsDoc = function(){ return doc(db, 'artifacts', appId, 'settings', 'buttonDefaults'); };
+  }
+
+  // 顯示「按鈕設定」子分頁（不依賴現有 activateSettingsTab）
+  function showButtonsPane(){
+    const btnCommunity = qs('subtab-community-btn');
+    const btnAccount   = qs('subtab-account-btn');
+    const btnButtons   = qs('subtab-buttons-btn');
+    const paneCommunity= qs('community-settings-pane');
+    const paneAccount  = qs('account-settings-pane');
+    const paneButtons  = qs('button-settings-pane');
+    if (!btnCommunity || !btnAccount || !btnButtons || !paneCommunity || !paneAccount || !paneButtons) return;
+    btnCommunity.classList.remove('text-primary');
+    btnAccount.classList.remove('text-primary');
+    btnButtons.classList.add('text-primary');
+    paneCommunity.classList.add('hidden');
+    paneAccount.classList.add('hidden');
+    paneButtons.classList.remove('hidden');
+  }
+
+  // 初始化預設按鈕設定（A/B 各 8 個）
+  async function ensureButtonDefaults(){
+    try {
+      const snap = await getDoc(window.appButtonDefaultsDoc());
+      if (!snap.exists()) {
+        const blank = () => Array.from({length:8}, () => ({ name:'', imageUrl:'', linkType:'internal', linkTarget:'' }));
+        await setDoc(window.appButtonDefaultsDoc(), { A: blank(), B: blank() }, { merge:true });
+      }
+    } catch (e){ console.warn('初始化預設按鈕設定失敗（略過）：', e); }
+  }
+
+  function normalize8(arr){
+    const base = Array.isArray(arr) ? arr.slice(0,8) : [];
+    while (base.length < 8) base.push({ name:'', imageUrl:'', linkType:'internal', linkTarget:'' });
+    return base.map(it => ({
+      name: it?.name || '',
+      imageUrl: it?.imageUrl || '',
+      linkType: it?.linkType === 'external' ? 'external' : 'internal',
+      linkTarget: it?.linkTarget || ''
+    }));
+  }
+
+  async function renderButtonSettings(){
+    const scopeSel = qs('button-settings-community');
+    // 填充社區選單（加入「預設」）
+    if (scopeSel) {
+      const options = ['<option value="default">預設</option>'];
+      if (Array.isArray(window.COMMUNITY_STORE)){
+        options.push(...window.COMMUNITY_STORE.map(c => `<option value="${c.__id}">${c.name}</option>`));
+      }
+      scopeSel.innerHTML = options.join('');
+    }
+
+    const btnA = qs('button-group-A');
+    const btnB = qs('button-group-B');
+    let currentGroup = 'A';
+    function setGroupUI(){
+      const active = 'px-3 py-2 rounded-lg border border-red-500 bg-red-500 text-white';
+      const normal = 'px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-500';
+      if (btnA) btnA.className = currentGroup === 'A' ? active : normal;
+      if (btnB) btnB.className = currentGroup === 'B' ? active : normal;
+    }
+    btnA?.addEventListener('click', () => { currentGroup='A'; setGroupUI(); });
+    btnB?.addEventListener('click', () => { currentGroup='B'; setGroupUI(); });
+    setGroupUI();
+
+    const gridA = qs('button-settings-grid-A');
+    const gridB = qs('button-settings-grid-B');
+
+    function renderGrid(container, items){
+      if (!container) return;
+      container.innerHTML = '';
+      items.forEach((it, idx) => {
+        const row = document.createElement('div');
+        row.className = 'grid grid-cols-[40px,1.2fr,1.5fr,1fr,2fr] gap-3 items-center bg-gray-50 p-3 rounded';
+        row.innerHTML = `
+          <div class="text-gray-600">${idx+1}</div>
+          <input class="border rounded px-2 py-1" placeholder="https://..." value="${it.imageUrl}" data-key="imageUrl" />
+          <input class="border rounded px-2 py-1" placeholder="按鈕名稱" value="${it.name}" data-key="name" />
+          <select class="border rounded px-2 py-1" data-key="linkType">
+            <option value="internal" ${it.linkType !== 'external' ? 'selected' : ''}>內部</option>
+            <option value="external" ${it.linkType === 'external' ? 'selected' : ''}>外部</option>
+          </select>
+          <input class="border rounded px-2 py-1" placeholder="/path 或 https://..." value="${it.linkTarget}" data-key="linkTarget" />
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    async function refreshGrid(){
+      const scope = scopeSel?.value || 'default';
+      if (scope === 'default'){
+        const defSnap = await getDoc(window.appButtonDefaultsDoc());
+        const defData = defSnap.exists() ? defSnap.data() : { A:[], B:[] };
+        renderGrid(gridA, normalize8(defData.A));
+        renderGrid(gridB, normalize8(defData.B));
+      } else {
+        const cSnap = await getDoc(doc(db, 'artifacts', appId, 'communities', scope));
+        const cData = cSnap.exists() ? cSnap.data() : {};
+        const bs = cData.buttonSettings || {};
+        renderGrid(gridA, normalize8(bs.A));
+        renderGrid(gridB, normalize8(bs.B));
+      }
+    }
+
+    scopeSel?.addEventListener('change', refreshGrid);
+    await refreshGrid();
+
+    // 載入預設到視圖（或社區視圖）
+    const loadDefaultBtn = qs('button-settings-load-default');
+    loadDefaultBtn?.addEventListener('click', async () => {
+      const defSnap = await getDoc(window.appButtonDefaultsDoc());
+      const defData = defSnap.exists() ? defSnap.data() : { A:[], B:[] };
+      renderGrid(gridA, normalize8(defData.A));
+      renderGrid(gridB, normalize8(defData.B));
+    });
+
+    // 儲存目前視圖（預設或社區）
+    const saveBtn = qs('button-settings-save');
+    saveBtn?.addEventListener('click', async () => {
+      const scope = scopeSel?.value || 'default';
+      function readGrid(container){
+        const rows = Array.from(container?.children || []);
+        return rows.map(r => {
+          const inputs = Array.from(r.querySelectorAll('input, select'));
+          const item = { name:'', imageUrl:'', linkType:'internal', linkTarget:'' };
+          inputs.forEach(el => {
+            const key = el.getAttribute('data-key');
+            const val = el.value || '';
+            if (!key) return;
+            item[key] = key === 'linkType' ? (val === 'external' ? 'external' : 'internal') : val;
+          });
+          return item;
+        });
+      }
+      const Aitems = readGrid(gridA);
+      const Bitems = readGrid(gridB);
+      try {
+        if (scope === 'default'){
+          await setDoc(window.appButtonDefaultsDoc(), { A: Aitems, B: Bitems }, { merge:true });
+          alert('已儲存「預設」的 A/B 按鈕設定');
+        } else {
+          await setDoc(doc(db, 'artifacts', appId, 'communities', scope), { buttonSettings: { A: Aitems, B: Bitems } }, { merge:true });
+          alert('已儲存「社區」的 A/B 按鈕設定');
+        }
+      } catch(e){
+        console.error('儲存按鈕設定失敗：', e);
+        alert('儲存失敗：請稍後再試或檢查 Firestore 規則');
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    await ensureButtonDefaults();
+    // 綁定子分頁按鈕
+    const subtabButtonsBtn = qs('subtab-buttons-btn');
+    subtabButtonsBtn?.addEventListener('click', () => {
+      showButtonsPane();
+      renderButtonSettings();
+    });
+  });
+})();
+</script>
 </body>
 </html>
