@@ -23,6 +23,7 @@
     #stage-footer { position: fixed; bottom: 0; left: 0; right: 0; height: 12vh; background: #ffffff; border-top: 1px solid #e5e7eb; display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; padding: 6px; z-index: 1000; }
     #stage-footer .btn { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #374151; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px 8px; cursor: pointer; }
     #stage-footer .btn .icon svg { width: 44px; height: 44px; display: block; }
+    #stage-footer .btn .icon img { width: 44px; height: 44px; display: block; object-fit: cover; }
     #stage-footer .btn .label { font-size: 24px; line-height: 1; }
     #stage-footer .btn:hover { color: var(--primary); border-color: #fca5a5; }
 
@@ -149,22 +150,103 @@
     </button>
   </footer>
 
-  <script>
-    // 讀取 localStorage 的社區資訊，填入頁首
+  <script type="module">
+    // 初始化頁首（從 localStorage）
     (function initHeader() {
       const name = localStorage.getItem('currentCommunityName') || '社區名稱';
       const photo = localStorage.getItem('currentCommunityPhotoUrl') || '';
       const nameEl = document.getElementById('stage-community-name');
       const imgEl = document.getElementById('stage-community-photo');
       nameEl.textContent = name;
-      if (photo) {
-        imgEl.src = photo;
-        imgEl.style.display = '';
-      } else {
-        // 若無照片，隱藏 img 以保留圓形底色
-        imgEl.style.display = 'none';
-      }
+      if (photo) { imgEl.src = photo; imgEl.style.display = ''; } else { imgEl.style.display = 'none'; }
     })();
+
+    // 載入 Firebase 並讀取社區 A/B 按鈕設定（預設使用 A 頁）
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    const userFirebaseConfig = {
+      apiKey: "AIzaSyD4Cc7Gsasy5rD5-VdyIRslUF6iEJ_A3lk",
+      authDomain: "nw-app-2025.firebaseapp.com",
+      projectId: "nw-app-2025",
+      storageBucket: "nw-app-2025.appspot.com",
+      messagingSenderId: "795564245715",
+      appId: "1:795564245715:web:5e459d6123824ee1104a26",
+      measurementId: "G-DK4NLS4Q57"
+    };
+    const firebaseConfig = typeof window.__firebase_config !== 'undefined' ? JSON.parse(window.__firebase_config) : userFirebaseConfig;
+    const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : (firebaseConfig.appId || 'default-app-id');
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const selectedCommunityId = localStorage.getItem('currentCommunityId') || '';
+
+    function appButtonDefaultsDoc() {
+      return doc(db, 'artifacts', appId, 'settings', 'buttonDefaults');
+    }
+    function communityDoc(id) {
+      return doc(db, 'artifacts', appId, 'communities', id);
+    }
+
+    const defaultItem = { name: '', imageUrl: '', linkType: 'internal', linkTarget: '' };
+    const norm8 = (arr) => {
+      const base = Array.isArray(arr) ? arr.slice(0, 8) : [];
+      while (base.length < 8) base.push({ ...defaultItem });
+      return base.map(it => ({
+        name: it?.name || '',
+        imageUrl: it?.imageUrl || '',
+        linkType: it?.linkType === 'external' ? 'external' : 'internal',
+        linkTarget: it?.linkTarget || ''
+      }));
+    };
+
+    async function loadButtons() {
+      try {
+        const defSnap = await getDoc(appButtonDefaultsDoc());
+        const defaults = defSnap.exists() ? defSnap.data() : { A: [], B: [] };
+        let itemsA = norm8(defaults.A);
+        // 嘗試讀取社區設定
+        if (selectedCommunityId) {
+          const cSnap = await getDoc(communityDoc(selectedCommunityId));
+          if (cSnap.exists()) {
+            const data = cSnap.data() || {};
+            const bs = data.buttonSettings || {};
+            const hasA = Array.isArray(bs.A) && bs.A.some(x => !!(x && (x.name || x.imageUrl || x.linkTarget)));
+            itemsA = norm8(hasA ? bs.A : itemsA);
+          }
+        }
+        applyButtons(itemsA);
+      } catch (err) {
+        console.warn('載入社區按鈕設定失敗，使用預設或現有標籤。', err);
+      }
+    }
+
+    function applyButtons(items) {
+      const btns = Array.from(document.querySelectorAll('#stage-footer .btn'));
+      btns.forEach((btn, idx) => {
+        const item = items[idx] || defaultItem;
+        const labelEl = btn.querySelector('.label');
+        const iconEl = btn.querySelector('.icon');
+        if (item.name) labelEl.textContent = item.name;
+        if (item.imageUrl) {
+          iconEl.innerHTML = `<img src="${item.imageUrl}" alt="icon" />`;
+        }
+        // 綁定導向
+        btn.onclick = () => {
+          const target = item.linkTarget || '';
+          if (!target) return;
+          if (item.linkType === 'external') {
+            window.open(target, '_blank');
+          } else {
+            // 內部導向：相對或絕對路徑
+            window.location.href = target;
+          }
+        };
+      });
+    }
+
+    loadButtons();
   </script>
 </body>
 </html>
