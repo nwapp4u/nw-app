@@ -10,11 +10,6 @@ service cloud.firestore {
       allow read, write: if true; // 開發測試期間開放；正式上線請改為 request.auth != null
     }
 
-    // 新增 settings/buttonDefaults 供「預設按鈕設定」讀寫
-    match /artifacts/{appId}/settings/{docId} {
-      allow read, write: if true; // 開發測試期間開放；正式上線請改為 request.auth != null
-    }
-
     // 其他路徑仍預設拒絕
     match /{document=**} {
       allow read, write: if false;

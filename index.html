@@ -34,7 +34,6 @@
             collection,
             getDocs,
             addDoc,
-            setDoc,
             updateDoc,
             deleteDoc
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -757,9 +756,6 @@
             const adB = document.getElementById('ad-b-img');
             if (adB) adB.src = makeSvgPlaceholder(1000, 200, `${community.name} 廣告B`);
             
-            // 套用 A/B 按鈕設定（社區自訂，無則回退預設）
-            applyCommunityButtonSettings(community.__id);
-
             // 顯示社區主頁
             showView('#community-page-view');
         }
@@ -782,106 +778,6 @@
                 `<text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="${fg}" font-family="Inter, Noto Sans TC, Arial" font-size="${Math.round(h/6)}">${text}</text>` +
                 `</svg>`;
             return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
-        }
-
-        /**
-         * 載入指定社區的 A/B 按鈕設定，無設定時回退到預設
-         */
-        async function loadButtonSettingsForCommunity(communityId) {
-            // 讀取預設
-            let defA = [], defB = [];
-            try {
-                const defSnap = await getDoc(appButtonDefaultsDoc());
-                if (defSnap.exists()) {
-                    const d = defSnap.data();
-                    defA = Array.isArray(d.A) ? d.A : [];
-                    defB = Array.isArray(d.B) ? d.B : [];
-                }
-            } catch (e) { /* 忽略錯誤，保持空陣列 */ }
-
-            // 讀取社區自訂
-            let a = defA.slice(0,8), b = defB.slice(0,8);
-            try {
-                if (communityId) {
-                    const cSnap = await getDoc(communityDoc(communityId));
-                    if (cSnap.exists()) {
-                        const data = cSnap.data();
-                        const bs = data.buttonSettings || {};
-                        const mix = (base, override) => {
-                            const out = [];
-                            for (let i = 0; i < 8; i++) {
-                                out[i] = { name:'', imageUrl:'', linkType:'internal', linkTarget:'', ...(base[i]||{}), ...(override?.[i]||{}) };
-                            }
-                            return out;
-                        };
-                        a = mix(defA, bs.A);
-                        b = mix(defB, bs.B);
-                    }
-                }
-            } catch (e) { /* 忽略錯誤，維持 def */ }
-
-            // 正規化長度 8
-            const norm = (arr) => {
-                const base = Array.isArray(arr) ? arr.slice(0,8) : [];
-                while (base.length < 8) base.push({ name:'', imageUrl:'', linkType:'internal', linkTarget:'' });
-                return base.map(it => ({
-                    name: it?.name || '',
-                    imageUrl: it?.imageUrl || '',
-                    linkType: it?.linkType === 'external' ? 'external' : 'internal',
-                    linkTarget: it?.linkTarget || ''
-                }));
-            };
-            return { A: norm(a), B: norm(b) };
-        }
-
-        /**
-         * 渲染 A/B 按鈕到社區主頁
-         */
-        async function applyCommunityButtonSettings(communityId) {
-            const gridA1 = document.getElementById('community-buttons-A-row1');
-            const gridA2 = document.getElementById('community-buttons-A-row2');
-            const gridB1 = document.getElementById('community-buttons-B-row1');
-            const gridB2 = document.getElementById('community-buttons-B-row2');
-            if (!gridA1 || !gridA2 || !gridB1 || !gridB2) return;
-
-            const bs = await loadButtonSettingsForCommunity(communityId);
-
-            const renderRow = (container, items) => {
-                container.innerHTML = '';
-                items.forEach((it, idx) => {
-                    const btn = document.createElement('button');
-                    btn.className = 'bg-primary text-white rounded flex flex-col items-center justify-center gap-1 py-1';
-                    btn.innerHTML = `
-                        ${it.imageUrl ? `<img src="${it.imageUrl}" class="w-8 h-8 object-contain" onerror="this.style.display='none'" />` : ''}
-                        <span class="text-xs">${it.name || `A${idx+1}`}</span>
-                    `;
-                    btn.addEventListener('click', () => handleButtonLink(it));
-                    container.appendChild(btn);
-                });
-            };
-
-            renderRow(gridA1, bs.A.slice(0,4));
-            renderRow(gridA2, bs.A.slice(4,8));
-            renderRow(gridB1, bs.B.slice(0,4));
-            renderRow(gridB2, bs.B.slice(4,8));
-        }
-
-        /**
-         * 依設定開啟連結：內部(#viewId 或相對路徑)／外部(http/https)
-         */
-        function handleButtonLink(it) {
-            const t = (it?.linkTarget || '').trim();
-            const type = it?.linkType === 'external' ? 'external' : 'internal';
-            if (!t) return;
-            if (type === 'external') {
-                try { window.open(t, '_blank'); } catch (_) { window.location.href = t; }
-            } else {
-                if (t.startsWith('#')) {
-                    showView(t);
-                } else {
-                    window.location.href = t; // 內部檔案或路徑
-                }
-            }
         }
 
         /**
@@ -924,17 +820,11 @@
         function accountsCollection() {
             return collection(db, 'artifacts', appId, 'accounts');
         }
-        function buttonSettingsCollection() {
-            return collection(db, 'artifacts', appId, 'buttonSettings');
-        }
         function communityDoc(id) {
             return doc(db, 'artifacts', appId, 'communities', id);
         }
         function accountDoc(id) {
             return doc(db, 'artifacts', appId, 'accounts', id);
-        }
-        function buttonSettingsDoc(id) {
-            return doc(db, 'artifacts', appId, 'buttonSettings', id);
         }
 
         // 載入設定頁資料（社區與帳號）
@@ -1023,27 +913,23 @@
         function activateSettingsTab(tab) {
             const communityBtn = document.getElementById('subtab-community-btn');
             const accountBtn = document.getElementById('subtab-account-btn');
-            const buttonsBtn = document.getElementById('subtab-buttons-btn');
             const communityPane = document.getElementById('community-settings-pane');
             const accountPane = document.getElementById('account-settings-pane');
-            const buttonsPane = document.getElementById('button-settings-pane');
 
-            if (!communityBtn || !accountBtn || !buttonsBtn || !communityPane || !accountPane || !buttonsPane) return;
+            if (!communityBtn || !accountBtn || !communityPane || !accountPane) return;
 
-            const setActive = (btn, pane, active) => {
-                if (active) { btn.classList.add('text-primary'); pane.classList.remove('hidden'); }
-                else { btn.classList.remove('text-primary'); pane.classList.add('hidden'); }
-            };
-
-            setActive(communityBtn, communityPane, tab === 'community');
-            setActive(accountBtn, accountPane, tab === 'account');
-            setActive(buttonsBtn, buttonsPane, tab === 'buttons');
-
-            if (tab === 'account') {
+            if (tab === 'community') {
+                communityBtn.classList.add('text-primary');
+                accountBtn.classList.remove('text-primary');
+                communityPane.classList.remove('hidden');
+                accountPane.classList.add('hidden');
+            } else {
+                accountBtn.classList.add('text-primary');
+                communityBtn.classList.remove('text-primary');
+                accountPane.classList.remove('hidden');
+                communityPane.classList.add('hidden');
                 renderAccountSettings();
                 renderAddAccountCommunityOptions();
-            } else if (tab === 'buttons') {
-                renderButtonSettings();
             }
         }
 
@@ -1528,7 +1414,6 @@
         <div class="h-[10%] bg-white border-b border-gray-200 flex items-center space-x-6 px-4 flex-shrink-0">
             <button id="subtab-community-btn" class="text-gray-700 font-medium">社區設定</button>
             <button id="subtab-account-btn" class="text-gray-700 font-medium">帳號設定</button>
-            <button id="subtab-buttons-btn" class="text-gray-700 font-medium">按鈕設定</button>
         </div>
 
         <!-- 內容 (80%) -->
@@ -1663,36 +1548,6 @@
                             <div>操作</div>
                         </div>
                         <div id="account-settings-list" class="space-y-2"></div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- 按鈕設定 Pane -->
-            <section id="button-settings-pane" class="space-y-4 hidden">
-                <div class="bg-white p-4 rounded-xl shadow-md">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-4">按鈕設定</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                        <div>
-                            <label class="block text-sm text-gray-600 mb-2">選擇社區</label>
-                            <select id="button-settings-community" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                                <option value="default">預設</option>
-                            </select>
-                        </div>
-                        <div class="md:col-span-2 flex items-end justify-end gap-2">
-                            <button id="button-settings-load-default" class="px-3 py-2 bg-gray-200 text-gray-800 rounded">載入預設</button>
-                            <button id="button-settings-save" class="px-3 py-2 bg-primary text-white rounded">儲存本社區設定</button>
-                        </div>
-                    </div>
-
-                    <!-- A 區域 -->
-                    <div class="mt-2">
-                        <h4 class="text-md font-medium text-gray-700 mb-2">A 區按鈕（A1–A8）</h4>
-                        <div id="button-settings-grid-A" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"></div>
-                    </div>
-                    <!-- B 區域 -->
-                    <div class="mt-4">
-                        <h4 class="text-md font-medium text-gray-700 mb-2">B 區按鈕（B1–B8）</h4>
-                        <div id="button-settings-grid-B" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"></div>
                     </div>
                 </div>
             </section>
@@ -1859,8 +1714,18 @@
             <!-- 按鈕A 20%：文字第一列靠左，第二列4按鈕，第三列4按鈕 -->
             <section class="h-[20vh] bg-gray-50 px-4 py-0 border-b border-gray-200">
                 <div class="h-[4vh] flex items-center text-gray-800 font-semibold">社區服務</div>
-                <div id="community-buttons-A-row1" class="h-[8vh] grid grid-cols-4 gap-3"></div>
-                <div id="community-buttons-A-row2" class="h-[8vh] grid grid-cols-4 gap-3"></div>
+                <div class="h-[8vh] grid grid-cols-4 gap-3">
+                    <button class="bg-primary text-white py-2 rounded">A1</button>
+                    <button class="bg-primary text-white py-2 rounded">A2</button>
+                    <button class="bg-primary text-white py-2 rounded">A3</button>
+                    <button class="bg-primary text-white py-2 rounded">A4</button>
+                </div>
+                <div class="h-[8vh] grid grid-cols-4 gap-3">
+                    <button class="bg-primary/80 text-white py-2 rounded">A5</button>
+                    <button class="bg-primary/80 text-white py-2 rounded">A6</button>
+                    <button class="bg-primary/80 text-white py-2 rounded">A7</button>
+                    <button class="bg-primary/80 text-white py-2 rounded">A8</button>
+                </div>
             </section>
 
             <!-- 廣告B 10%：圖片（使用內嵌 SVG 佔位，避免外部網域） -->
@@ -1871,8 +1736,18 @@
             <!-- 按鈕B 20%：文字第一列靠左，第二列4按鈕，第三列4按鈕 -->
             <section class="h-[20vh] bg-gray-50 px-4 py-0">
                 <div class="h-[4vh] flex items-center text-gray-800 font-semibold">生活服務</div>
-                <div id="community-buttons-B-row1" class="h-[8vh] grid grid-cols-4 gap-3"></div>
-                <div id="community-buttons-B-row2" class="h-[8vh] grid grid-cols-4 gap-3"></div>
+                <div class="h-[8vh] grid grid-cols-4 gap-3">
+                    <button class="bg-indigo-600 text-white py-2 rounded">B1</button>
+                    <button class="bg-indigo-600 text-white py-2 rounded">B2</button>
+                    <button class="bg-indigo-600 text-white py-2 rounded">B3</button>
+                    <button class="bg-indigo-600 text-white py-2 rounded">B4</button>
+                </div>
+                <div class="h-[8vh] grid grid-cols-4 gap-3">
+                    <button class="bg-indigo-500 text-white py-2 rounded">B5</button>
+                    <button class="bg-indigo-500 text-white py-2 rounded">B6</button>
+                    <button class="bg-indigo-500 text-white py-2 rounded">B7</button>
+                    <button class="bg-indigo-500 text-white py-2 rounded">B8</button>
+                </div>
             </section>
         </main>
 
@@ -1900,175 +1775,5 @@
 
     </div>
 
-<script>
-(function(){
-  // 取得必要 DOM
-  function qs(id){ return document.getElementById(id); }
-
-  // 若外部尚未定義，補上預設按鈕設定文件位置方法
-  if (typeof window.appButtonDefaultsDoc !== 'function') {
-    window.appButtonDefaultsDoc = function(){ return doc(db, 'artifacts', appId, 'settings', 'buttonDefaults'); };
-  }
-
-  // 顯示「按鈕設定」子分頁（不依賴現有 activateSettingsTab）
-  function showButtonsPane(){
-    const btnCommunity = qs('subtab-community-btn');
-    const btnAccount   = qs('subtab-account-btn');
-    const btnButtons   = qs('subtab-buttons-btn');
-    const paneCommunity= qs('community-settings-pane');
-    const paneAccount  = qs('account-settings-pane');
-    const paneButtons  = qs('button-settings-pane');
-    if (!btnCommunity || !btnAccount || !btnButtons || !paneCommunity || !paneAccount || !paneButtons) return;
-    btnCommunity.classList.remove('text-primary');
-    btnAccount.classList.remove('text-primary');
-    btnButtons.classList.add('text-primary');
-    paneCommunity.classList.add('hidden');
-    paneAccount.classList.add('hidden');
-    paneButtons.classList.remove('hidden');
-  }
-
-  // 初始化預設按鈕設定（A/B 各 8 個）
-  async function ensureButtonDefaults(){
-    try {
-      const snap = await getDoc(window.appButtonDefaultsDoc());
-      if (!snap.exists()) {
-        const blank = () => Array.from({length:8}, () => ({ name:'', imageUrl:'', linkType:'internal', linkTarget:'' }));
-        await setDoc(window.appButtonDefaultsDoc(), { A: blank(), B: blank() }, { merge:true });
-      }
-    } catch (e){ console.warn('初始化預設按鈕設定失敗（略過）：', e); }
-  }
-
-  function normalize8(arr){
-    const base = Array.isArray(arr) ? arr.slice(0,8) : [];
-    while (base.length < 8) base.push({ name:'', imageUrl:'', linkType:'internal', linkTarget:'' });
-    return base.map(it => ({
-      name: it?.name || '',
-      imageUrl: it?.imageUrl || '',
-      linkType: it?.linkType === 'external' ? 'external' : 'internal',
-      linkTarget: it?.linkTarget || ''
-    }));
-  }
-
-  async function renderButtonSettings(){
-    const scopeSel = qs('button-settings-community');
-    // 填充社區選單（加入「預設」）
-    if (scopeSel) {
-      const options = ['<option value="default">預設</option>'];
-      if (Array.isArray(window.COMMUNITY_STORE)){
-        options.push(...window.COMMUNITY_STORE.map(c => `<option value="${c.__id}">${c.name}</option>`));
-      }
-      scopeSel.innerHTML = options.join('');
-    }
-
-    const btnA = qs('button-group-A');
-    const btnB = qs('button-group-B');
-    let currentGroup = 'A';
-    function setGroupUI(){
-      const active = 'px-3 py-2 rounded-lg border border-red-500 bg-red-500 text-white';
-      const normal = 'px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-500';
-      if (btnA) btnA.className = currentGroup === 'A' ? active : normal;
-      if (btnB) btnB.className = currentGroup === 'B' ? active : normal;
-    }
-    btnA?.addEventListener('click', () => { currentGroup='A'; setGroupUI(); });
-    btnB?.addEventListener('click', () => { currentGroup='B'; setGroupUI(); });
-    setGroupUI();
-
-    const gridA = qs('button-settings-grid-A');
-    const gridB = qs('button-settings-grid-B');
-
-    function renderGrid(container, items){
-      if (!container) return;
-      container.innerHTML = '';
-      items.forEach((it, idx) => {
-        const row = document.createElement('div');
-        row.className = 'grid grid-cols-[40px,1.2fr,1.5fr,1fr,2fr] gap-3 items-center bg-gray-50 p-3 rounded';
-        row.innerHTML = `
-          <div class="text-gray-600">${idx+1}</div>
-          <input class="border rounded px-2 py-1" placeholder="https://..." value="${it.imageUrl}" data-key="imageUrl" />
-          <input class="border rounded px-2 py-1" placeholder="按鈕名稱" value="${it.name}" data-key="name" />
-          <select class="border rounded px-2 py-1" data-key="linkType">
-            <option value="internal" ${it.linkType !== 'external' ? 'selected' : ''}>內部</option>
-            <option value="external" ${it.linkType === 'external' ? 'selected' : ''}>外部</option>
-          </select>
-          <input class="border rounded px-2 py-1" placeholder="/path 或 https://..." value="${it.linkTarget}" data-key="linkTarget" />
-        `;
-        container.appendChild(row);
-      });
-    }
-
-    async function refreshGrid(){
-      const scope = scopeSel?.value || 'default';
-      if (scope === 'default'){
-        const defSnap = await getDoc(window.appButtonDefaultsDoc());
-        const defData = defSnap.exists() ? defSnap.data() : { A:[], B:[] };
-        renderGrid(gridA, normalize8(defData.A));
-        renderGrid(gridB, normalize8(defData.B));
-      } else {
-        const cSnap = await getDoc(doc(db, 'artifacts', appId, 'communities', scope));
-        const cData = cSnap.exists() ? cSnap.data() : {};
-        const bs = cData.buttonSettings || {};
-        renderGrid(gridA, normalize8(bs.A));
-        renderGrid(gridB, normalize8(bs.B));
-      }
-    }
-
-    scopeSel?.addEventListener('change', refreshGrid);
-    await refreshGrid();
-
-    // 載入預設到視圖（或社區視圖）
-    const loadDefaultBtn = qs('button-settings-load-default');
-    loadDefaultBtn?.addEventListener('click', async () => {
-      const defSnap = await getDoc(window.appButtonDefaultsDoc());
-      const defData = defSnap.exists() ? defSnap.data() : { A:[], B:[] };
-      renderGrid(gridA, normalize8(defData.A));
-      renderGrid(gridB, normalize8(defData.B));
-    });
-
-    // 儲存目前視圖（預設或社區）
-    const saveBtn = qs('button-settings-save');
-    saveBtn?.addEventListener('click', async () => {
-      const scope = scopeSel?.value || 'default';
-      function readGrid(container){
-        const rows = Array.from(container?.children || []);
-        return rows.map(r => {
-          const inputs = Array.from(r.querySelectorAll('input, select'));
-          const item = { name:'', imageUrl:'', linkType:'internal', linkTarget:'' };
-          inputs.forEach(el => {
-            const key = el.getAttribute('data-key');
-            const val = el.value || '';
-            if (!key) return;
-            item[key] = key === 'linkType' ? (val === 'external' ? 'external' : 'internal') : val;
-          });
-          return item;
-        });
-      }
-      const Aitems = readGrid(gridA);
-      const Bitems = readGrid(gridB);
-      try {
-        if (scope === 'default'){
-          await setDoc(window.appButtonDefaultsDoc(), { A: Aitems, B: Bitems }, { merge:true });
-          alert('已儲存「預設」的 A/B 按鈕設定');
-        } else {
-          await setDoc(doc(db, 'artifacts', appId, 'communities', scope), { buttonSettings: { A: Aitems, B: Bitems } }, { merge:true });
-          alert('已儲存「社區」的 A/B 按鈕設定');
-        }
-      } catch(e){
-        console.error('儲存按鈕設定失敗：', e);
-        alert('儲存失敗：請稍後再試或檢查 Firestore 規則');
-      }
-    });
-  }
-
-  document.addEventListener('DOMContentLoaded', async () => {
-    await ensureButtonDefaults();
-    // 綁定子分頁按鈕
-    const subtabButtonsBtn = qs('subtab-buttons-btn');
-    subtabButtonsBtn?.addEventListener('click', () => {
-      showButtonsPane();
-      renderButtonSettings();
-    });
-  });
-})();
-</script>
 </body>
 </html>
