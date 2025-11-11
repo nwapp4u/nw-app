@@ -30,6 +30,7 @@
             getFirestore, 
             doc, 
             getDoc,
+            setDoc,
             setLogLevel,
             collection,
             getDocs,
@@ -62,6 +63,11 @@
         // 設定頁資料來源（將以 Firestore 為主，失敗時可維持空陣列）
         const COMMUNITY_STORE = [];
         const ACCOUNT_STORE = [];
+        // 預設按鈕設定（A/B 各 8 筆），社區未設定時使用
+        let BUTTON_DEFAULTS = {
+          A: Array(8).fill(null).map(() => ({ name: '', imageUrl: '', linkType: 'internal', linkTarget: '' })),
+          B: Array(8).fill(null).map(() => ({ name: '', imageUrl: '', linkType: 'internal', linkTarget: '' }))
+        };
         
         // 模擬資料已不再使用；社區列表改為從 Firestore 讀取
 
@@ -833,10 +839,37 @@
         function accountDoc(id) {
             return doc(db, 'artifacts', appId, 'accounts', id);
         }
+        // 預設按鈕設定文件位置
+        function appButtonDefaultsDoc() {
+            return doc(db, 'artifacts', appId, 'settings', 'buttonDefaults');
+        }
 
         // 載入設定頁資料（社區與帳號）
         async function loadSettingsData() {
             try {
+                // 載入預設按鈕設定（若不存在則維持本地預設）
+                try {
+                    const defSnap = await getDoc(appButtonDefaultsDoc());
+                    if (defSnap.exists()) {
+                        const defData = defSnap.data() || {};
+                        const norm = (arr) => {
+                            const base = Array.isArray(arr) ? arr.slice(0, 8) : [];
+                            while (base.length < 8) base.push({ name: '', imageUrl: '', linkType: 'internal', linkTarget: '' });
+                            return base.map(it => ({
+                                name: it?.name || '',
+                                imageUrl: it?.imageUrl || '',
+                                linkType: it?.linkType === 'external' ? 'external' : 'internal',
+                                linkTarget: it?.linkTarget || ''
+                            }));
+                        };
+                        BUTTON_DEFAULTS = {
+                            A: norm(defData.A),
+                            B: norm(defData.B)
+                        };
+                    }
+                } catch (e) {
+                    console.warn('讀取預設按鈕設定失敗（沿用本地預設）:', e);
+                }
                 // 讀取社區
                 const commSnap = await getDocs(communitiesCollection());
                 COMMUNITY_STORE.length = 0;
@@ -854,6 +887,8 @@
                         }));
                     };
                     const btnSettings = data.buttonSettings || {};
+                    const arrA = (Array.isArray(btnSettings.A) && btnSettings.A.length) ? btnSettings.A : BUTTON_DEFAULTS.A;
+                    const arrB = (Array.isArray(btnSettings.B) && btnSettings.B.length) ? btnSettings.B : BUTTON_DEFAULTS.B;
                     COMMUNITY_STORE.push({
                         __id: docSnap.id,
                         photoUrl: data.photoUrl || '',
@@ -861,8 +896,8 @@
                         name: data.name || '',
                         population: data.population || 0,
                         buttonSettings: {
-                            A: ensureArray8(btnSettings.A),
-                            B: ensureArray8(btnSettings.B)
+                            A: ensureArray8(arrA),
+                            B: ensureArray8(arrB)
                         }
                     });
                 });
@@ -1248,15 +1283,18 @@
             if (!selectEl || !listEl || !btnA || !btnB || !saveBtn) return;
 
             // 初始化社區下拉選單（只在首次或社區變更時更新）
-            if (selectEl.options.length !== COMMUNITY_STORE.length) {
-                selectEl.innerHTML = '';
-                COMMUNITY_STORE.forEach((c, i) => {
-                    const opt = document.createElement('option');
-                    opt.value = c.__id || `local-${i}`;
-                    opt.textContent = c.name || c.code || `社區${i + 1}`;
-                    selectEl.appendChild(opt);
-                });
-            }
+            // 重建社區下拉（包含「預設設定」）
+            selectEl.innerHTML = '';
+            const defOpt = document.createElement('option');
+            defOpt.value = '__default__';
+            defOpt.textContent = '預設設定（未設定社區使用）';
+            selectEl.appendChild(defOpt);
+            COMMUNITY_STORE.forEach((c, i) => {
+                const opt = document.createElement('option');
+                opt.value = c.__id || `local-${i}`;
+                opt.textContent = c.name || c.code || `社區${i + 1}`;
+                selectEl.appendChild(opt);
+            });
 
             // 保留目前 A/B 狀態（暫存於 DOM dataset）
             const group = (btnA.dataset.active === 'true') ? 'A' : (btnB.dataset.active === 'true') ? 'B' : 'A';
@@ -1274,7 +1312,7 @@
                     btnB.dataset.active = 'false';
                 } else {
                     btnB.className = 'px-3 py-2 rounded-lg bg-primary text-white';
-                    btnA.className = 'px-3 py-2 rounded-lg bg-gray-2 00 text-gray-700';
+                    btnA.className = 'px-3 py-2 rounded-lg bg-gray-200 text-gray-700';
                     btnA.dataset.active = 'false';
                     btnB.dataset.active = 'true';
                 }
@@ -1282,16 +1320,27 @@
             setGroupUI(group);
 
             // 找到選定社區資料
-            const selectedId = selectEl.value || (COMMUNITY_STORE[0]?.__id || '');
-            const community = COMMUNITY_STORE.find(c => c.__id === selectedId) || COMMUNITY_STORE[0];
-            if (!community) {
-                listEl.innerHTML = '<div class="text-gray-500">尚無社區資料，請先新增社區。</div>';
+            const selectedId = selectEl.value || '__default__';
+            const isDefault = selectedId === '__default__';
+            const community = isDefault ? null : (COMMUNITY_STORE.find(c => c.__id === selectedId) || COMMUNITY_STORE[0]);
+            if (!isDefault && !community) {
+                listEl.innerHTML = '<div class="text-gray-500">尚無社區資料，請先新增社區，或選擇「預設設定」。</div>';
                 return;
             }
-            // 確保 buttonSettings 結構存在
+            // 取得項目來源（預設或社區）
             const defaultItem = { name: '', imageUrl: '', linkType: 'internal', linkTarget: '' };
-            if (!community.buttonSettings) community.buttonSettings = { A: Array(8).fill(defaultItem), B: Array(8).fill(defaultItem) };
-            const items = group === 'A' ? community.buttonSettings.A : community.buttonSettings.B;
+            const items = (() => {
+                if (isDefault) {
+                    const arr = group === 'A' ? BUTTON_DEFAULTS.A : BUTTON_DEFAULTS.B;
+                    while (arr.length < 8) arr.push({ ...defaultItem });
+                    return arr;
+                } else {
+                    if (!community.buttonSettings) community.buttonSettings = { A: Array(8).fill(defaultItem), B: Array(8).fill(defaultItem) };
+                    const arr = group === 'A' ? community.buttonSettings.A : community.buttonSettings.B;
+                    while (arr.length < 8) arr.push({ ...defaultItem });
+                    return arr;
+                }
+            })();
             while (items.length < 8) items.push({ ...defaultItem });
 
             // 渲染 8 列
@@ -1336,7 +1385,9 @@
             saveBtn.onclick = async () => {
                 try {
                     const savingGroup = btnA.dataset.active === 'true' ? 'A' : 'B';
-                    const targetItems = savingGroup === 'A' ? community.buttonSettings.A : community.buttonSettings.B;
+                    const targetItems = isDefault
+                        ? (savingGroup === 'A' ? BUTTON_DEFAULTS.A : BUTTON_DEFAULTS.B)
+                        : (savingGroup === 'A' ? community.buttonSettings.A : community.buttonSettings.B);
                     // 讀取 UI 值
                     for (let idx = 0; idx < 8; idx++) {
                         const idPrefix = `btn-${savingGroup}-${idx}`;
@@ -1352,11 +1403,16 @@
                         targetItems[idx] = { name: nameVal, imageUrl, linkType: typeVal, linkTarget: targetVal };
                     }
                     // 寫入 Firestore
-                    if (community.__id) {
+                    if (isDefault) {
+                        await setDoc(appButtonDefaultsDoc(), {
+                            A: BUTTON_DEFAULTS.A,
+                            B: BUTTON_DEFAULTS.B
+                        });
+                    } else if (community.__id) {
                         await updateDoc(communityDoc(community.__id), {
                             buttonSettings: {
-                                A: targetItems,
-                                B: savingGroup === 'A' ? community.buttonSettings.B : community.buttonSettings.A
+                                A: community.buttonSettings.A,
+                                B: community.buttonSettings.B
                             }
                         });
                     }
