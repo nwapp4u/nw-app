@@ -481,6 +481,7 @@
             // 設定頁子分頁按鈕與表單
             const subtabCommunityBtn = document.getElementById('subtab-community-btn');
             const subtabAccountBtn = document.getElementById('subtab-account-btn');
+            const subtabButtonBtn = document.getElementById('subtab-button-btn');
             if (subtabCommunityBtn) {
                 subtabCommunityBtn.addEventListener('click', () => {
                     activateSettingsTab('community');
@@ -491,6 +492,12 @@
                 subtabAccountBtn.addEventListener('click', () => {
                     activateSettingsTab('account');
                     renderAccountSettings();
+                });
+            }
+            if (subtabButtonBtn) {
+                subtabButtonBtn.addEventListener('click', () => {
+                    activateSettingsTab('button');
+                    renderButtonSettings();
                 });
             }
 
@@ -835,12 +842,28 @@
                 COMMUNITY_STORE.length = 0;
                 commSnap.forEach(docSnap => {
                     const data = docSnap.data();
+                    const defaultItem = { name: '', imageUrl: '', linkType: 'internal', linkTarget: '' };
+                    const ensureArray8 = (arr) => {
+                        const base = Array.isArray(arr) ? arr.slice(0, 8) : [];
+                        while (base.length < 8) base.push({ ...defaultItem });
+                        return base.map(it => ({
+                            name: it?.name || '',
+                            imageUrl: it?.imageUrl || '',
+                            linkType: it?.linkType === 'external' ? 'external' : 'internal',
+                            linkTarget: it?.linkTarget || ''
+                        }));
+                    };
+                    const btnSettings = data.buttonSettings || {};
                     COMMUNITY_STORE.push({
                         __id: docSnap.id,
                         photoUrl: data.photoUrl || '',
                         code: data.code || '',
                         name: data.name || '',
-                        population: data.population || 0
+                        population: data.population || 0,
+                        buttonSettings: {
+                            A: ensureArray8(btnSettings.A),
+                            B: ensureArray8(btnSettings.B)
+                        }
                     });
                 });
 
@@ -913,23 +936,32 @@
         function activateSettingsTab(tab) {
             const communityBtn = document.getElementById('subtab-community-btn');
             const accountBtn = document.getElementById('subtab-account-btn');
+            const buttonBtn = document.getElementById('subtab-button-btn');
             const communityPane = document.getElementById('community-settings-pane');
             const accountPane = document.getElementById('account-settings-pane');
+            const buttonPane = document.getElementById('button-settings-pane');
 
-            if (!communityBtn || !accountBtn || !communityPane || !accountPane) return;
+            if (!communityBtn || !accountBtn || !buttonBtn || !communityPane || !accountPane || !buttonPane) return;
+
+            // 清除狀態
+            communityBtn.classList.remove('text-primary');
+            accountBtn.classList.remove('text-primary');
+            buttonBtn.classList.remove('text-primary');
+            communityPane.classList.add('hidden');
+            accountPane.classList.add('hidden');
+            buttonPane.classList.add('hidden');
 
             if (tab === 'community') {
                 communityBtn.classList.add('text-primary');
-                accountBtn.classList.remove('text-primary');
                 communityPane.classList.remove('hidden');
-                accountPane.classList.add('hidden');
-            } else {
+            } else if (tab === 'account') {
                 accountBtn.classList.add('text-primary');
-                communityBtn.classList.remove('text-primary');
                 accountPane.classList.remove('hidden');
-                communityPane.classList.add('hidden');
                 renderAccountSettings();
                 renderAddAccountCommunityOptions();
+            } else if (tab === 'button') {
+                buttonBtn.classList.add('text-primary');
+                buttonPane.classList.remove('hidden');
             }
         }
 
@@ -1205,6 +1237,138 @@
         }
 
         /**
+         * 渲染「按鈕設定」：提供社區選擇、A/B 頁切換，每頁 8 個項目（圖片、名稱、連結）
+         */
+        function renderButtonSettings() {
+            const selectEl = document.getElementById('button-settings-community-select');
+            const listEl = document.getElementById('button-settings-list');
+            const btnA = document.getElementById('button-settings-group-a');
+            const btnB = document.getElementById('button-settings-group-b');
+            const saveBtn = document.getElementById('button-settings-save');
+            if (!selectEl || !listEl || !btnA || !btnB || !saveBtn) return;
+
+            // 初始化社區下拉選單（只在首次或社區變更時更新）
+            if (selectEl.options.length !== COMMUNITY_STORE.length) {
+                selectEl.innerHTML = '';
+                COMMUNITY_STORE.forEach((c, i) => {
+                    const opt = document.createElement('option');
+                    opt.value = c.__id || `local-${i}`;
+                    opt.textContent = c.name || c.code || `社區${i + 1}`;
+                    selectEl.appendChild(opt);
+                });
+            }
+
+            // 保留目前 A/B 狀態（暫存於 DOM dataset）
+            const group = (btnA.dataset.active === 'true') ? 'A' : (btnB.dataset.active === 'true') ? 'B' : 'A';
+            // 初始為 A
+            if (!btnA.dataset.initialized) {
+                btnA.dataset.initialized = 'true';
+                btnA.dataset.active = 'true';
+            }
+            // 依據 A/B 切換樣式
+            const setGroupUI = (g) => {
+                if (g === 'A') {
+                    btnA.className = 'px-3 py-2 rounded-lg bg-primary text-white';
+                    btnB.className = 'px-3 py-2 rounded-lg bg-gray-200 text-gray-700';
+                    btnA.dataset.active = 'true';
+                    btnB.dataset.active = 'false';
+                } else {
+                    btnB.className = 'px-3 py-2 rounded-lg bg-primary text-white';
+                    btnA.className = 'px-3 py-2 rounded-lg bg-gray-2 00 text-gray-700';
+                    btnA.dataset.active = 'false';
+                    btnB.dataset.active = 'true';
+                }
+            };
+            setGroupUI(group);
+
+            // 找到選定社區資料
+            const selectedId = selectEl.value || (COMMUNITY_STORE[0]?.__id || '');
+            const community = COMMUNITY_STORE.find(c => c.__id === selectedId) || COMMUNITY_STORE[0];
+            if (!community) {
+                listEl.innerHTML = '<div class="text-gray-500">尚無社區資料，請先新增社區。</div>';
+                return;
+            }
+            // 確保 buttonSettings 結構存在
+            const defaultItem = { name: '', imageUrl: '', linkType: 'internal', linkTarget: '' };
+            if (!community.buttonSettings) community.buttonSettings = { A: Array(8).fill(defaultItem), B: Array(8).fill(defaultItem) };
+            const items = group === 'A' ? community.buttonSettings.A : community.buttonSettings.B;
+            while (items.length < 8) items.push({ ...defaultItem });
+
+            // 渲染 8 列
+            listEl.innerHTML = '';
+            items.forEach((it, idx) => {
+                const row = document.createElement('div');
+                row.className = 'grid grid-cols-[96px,1fr,1fr,2fr] gap-4 items-center bg-white p-4 rounded-lg shadow-sm';
+                const idPrefix = `btn-${group}-${idx}`;
+                row.innerHTML = `
+                    <div class="flex flex-col items-center gap-1">
+                        <div class="w-20 h-20 rounded bg-gray-100 overflow-hidden" id="${idPrefix}-preview">${it.imageUrl ? `<img src="${it.imageUrl}" class="w-full h-full object-cover" onerror="this.style.display='none'" />` : ''}</div>
+                        <input type="file" accept="image/*" id="${idPrefix}-file" class="text-xs" />
+                    </div>
+                    <input class="border rounded px-2 py-1" id="${idPrefix}-name" value="${it.name || ''}" placeholder="按鈕名稱" />
+                    <select class="border rounded px-2 py-1" id="${idPrefix}-type">
+                        <option value="internal" ${it.linkType !== 'external' ? 'selected' : ''}>內部</option>
+                        <option value="external" ${it.linkType === 'external' ? 'selected' : ''}>外部</option>
+                    </select>
+                    <input class="border rounded px-2 py-1" id="${idPrefix}-target" value="${it.linkTarget || ''}" placeholder="例如: /stage.html 或 https://..." />
+                `;
+                listEl.appendChild(row);
+
+                const fileInput = row.querySelector(`#${idPrefix}-file`);
+                const previewEl = row.querySelector(`#${idPrefix}-preview`);
+                fileInput?.addEventListener('change', () => {
+                    const file = fileInput.files?.[0];
+                    if (file) {
+                        const url = URL.createObjectURL(file);
+                        previewEl.innerHTML = `<img src="${url}" class="w-full h-full object-cover" />`;
+                        it.__tempFile = file;
+                    }
+                });
+            });
+
+            // 綁定 A/B 切換
+            btnA.onclick = () => { setGroupUI('A'); renderButtonSettings(); };
+            btnB.onclick = () => { setGroupUI('B'); renderButtonSettings(); };
+            // 社區切換
+            selectEl.onchange = () => { renderButtonSettings(); };
+
+            // 儲存目前頁面設定
+            saveBtn.onclick = async () => {
+                try {
+                    const savingGroup = btnA.dataset.active === 'true' ? 'A' : 'B';
+                    const targetItems = savingGroup === 'A' ? community.buttonSettings.A : community.buttonSettings.B;
+                    // 讀取 UI 值
+                    for (let idx = 0; idx < 8; idx++) {
+                        const idPrefix = `btn-${savingGroup}-${idx}`;
+                        const nameVal = document.getElementById(`${idPrefix}-name`).value.trim();
+                        const typeVal = document.getElementById(`${idPrefix}-type`).value === 'external' ? 'external' : 'internal';
+                        const targetVal = document.getElementById(`${idPrefix}-target`).value.trim();
+                        let imageUrl = targetItems[idx]?.imageUrl || '';
+                        const tempFile = targetItems[idx]?.__tempFile;
+                        if (tempFile) {
+                            imageUrl = await uploadPhotoAndGetURL(tempFile, 'buttons');
+                            delete targetItems[idx].__tempFile;
+                        }
+                        targetItems[idx] = { name: nameVal, imageUrl, linkType: typeVal, linkTarget: targetVal };
+                    }
+                    // 寫入 Firestore
+                    if (community.__id) {
+                        await updateDoc(communityDoc(community.__id), {
+                            buttonSettings: {
+                                A: targetItems,
+                                B: savingGroup === 'A' ? community.buttonSettings.B : community.buttonSettings.A
+                            }
+                        });
+                    }
+                    alert('已儲存按鈕設定');
+                } catch (err) {
+                    console.error('儲存按鈕設定失敗', err);
+                    alert('儲存失敗');
+                }
+            };
+        }
+
+        /**
          * 提交新增帳號
          */
         async function handleAddAccountSubmit(e) {
@@ -1414,6 +1578,7 @@
         <div class="h-[10%] bg-white border-b border-gray-200 flex items-center space-x-6 px-4 flex-shrink-0">
             <button id="subtab-community-btn" class="text-gray-700 font-medium">社區設定</button>
             <button id="subtab-account-btn" class="text-gray-700 font-medium">帳號設定</button>
+            <button id="subtab-button-btn" class="text-gray-700 font-medium">按鈕設定</button>
         </div>
 
         <!-- 內容 (80%) -->
@@ -1549,6 +1714,38 @@
                         </div>
                         <div id="account-settings-list" class="space-y-2"></div>
                     </div>
+                </div>
+            </section>
+
+            <!-- 按鈕設定 Pane -->
+            <section id="button-settings-pane" class="space-y-4 hidden">
+                <!-- 選擇社區與 A/B 頁切換 -->
+                <div class="bg-white p-4 rounded-xl shadow-md flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                        <label class="text-sm text-gray-600">選擇社區</label>
+                        <select id="button-settings-community-select" class="px-3 py-2 border border-gray-300 rounded-lg min-w-[200px]"></select>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button id="button-settings-group-a" class="px-3 py-2 rounded-lg bg-primary text-white">A 頁</button>
+                        <button id="button-settings-group-b" class="px-3 py-2 rounded-lg bg-gray-200 text-gray-700">B 頁</button>
+                    </div>
+                </div>
+
+                <!-- 16 個按鈕設定（依 A/B 顯示 8 個） -->
+                <div class="bg-white p-4 rounded-xl shadow-md settings-scroll-container overflow-x-auto">
+                    <div class="min-w-[1200px]">
+                        <div class="grid grid-cols-[96px,1fr,1fr,2fr] gap-4 text-gray-500 text-sm font-medium mb-2">
+                            <div>圖示</div>
+                            <div>名稱</div>
+                            <div>連結類型</div>
+                            <div>連結位置</div>
+                        </div>
+                        <div id="button-settings-list" class="space-y-2"></div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-md flex items-center justify-end gap-2">
+                    <button id="button-settings-save" class="px-4 py-2 bg-primary text-white rounded-lg">儲存目前頁面設定</button>
                 </div>
             </section>
         </main>
