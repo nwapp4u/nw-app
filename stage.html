@@ -48,9 +48,12 @@
 
   <!-- 中間內容 66%：可滾動 -->
   <main id="stage-content">
-    <div class="card">
-      <h2 style="margin:0 0 8px 0; font-size:16px;">平台內容</h2>
-      <p style="margin:0; color:#4b5563;">此區為平台的主要內容區塊（66% 高）。</p>
+    <div class="card" id="group-switcher" style="display:flex; align-items:center; justify-content:space-between;">
+      <h2 style="margin:0; font-size:16px;">首頁按鈕</h2>
+      <div style="display:flex; gap:8px;">
+        <button id="switch-A" class="switch-btn" style="padding:6px 10px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; color:#111827;">A 頁</button>
+        <button id="switch-B" class="switch-btn" style="padding:6px 10px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; color:#6b7280;">B 頁</button>
+      </div>
     </div>
   </main>
 
@@ -181,6 +184,8 @@
     const db = getFirestore(app);
 
     const selectedCommunityId = localStorage.getItem('currentCommunityId') || '';
+    const params = new URLSearchParams(window.location.search);
+    let currentGroup = (params.get('group') || localStorage.getItem('currentButtonGroup') || 'A').toUpperCase() === 'B' ? 'B' : 'A';
 
     function appButtonDefaultsDoc() {
       return doc(db, 'artifacts', appId, 'settings', 'buttonDefaults');
@@ -205,18 +210,19 @@
       try {
         const defSnap = await getDoc(appButtonDefaultsDoc());
         const defaults = defSnap.exists() ? defSnap.data() : { A: [], B: [] };
-        let itemsA = norm8(defaults.A);
+        let items = norm8(defaults[currentGroup] || []);
         // 嘗試讀取社區設定
         if (selectedCommunityId) {
           const cSnap = await getDoc(communityDoc(selectedCommunityId));
           if (cSnap.exists()) {
             const data = cSnap.data() || {};
             const bs = data.buttonSettings || {};
-            const hasA = Array.isArray(bs.A) && bs.A.some(x => !!(x && (x.name || x.imageUrl || x.linkTarget)));
-            itemsA = norm8(hasA ? bs.A : itemsA);
+            const arr = currentGroup === 'B' ? bs.B : bs.A;
+            const has = Array.isArray(arr) && arr.some(x => !!(x && (x.name || x.imageUrl || x.linkTarget)));
+            items = norm8(has ? arr : items);
           }
         }
-        applyButtons(itemsA);
+        applyButtons(items);
       } catch (err) {
         console.warn('載入社區按鈕設定失敗，使用預設或現有標籤。', err);
       }
@@ -246,6 +252,21 @@
       });
     }
 
+    // 綁定 A/B 切換
+    const btnA = document.getElementById('switch-A');
+    const btnB = document.getElementById('switch-B');
+    function setSwitchUI() {
+      if (btnA && btnB) {
+        const activeStyle = 'padding:6px 10px; border:1px solid #ef4444; background:#ef4444; color:#fff; border-radius:8px;';
+        const normalStyle = 'padding:6px 10px; border:1px solid #e5e7eb; background:#fff; color:#6b7280; border-radius:8px;';
+        btnA.setAttribute('style', currentGroup === 'A' ? activeStyle : normalStyle);
+        btnB.setAttribute('style', currentGroup === 'B' ? activeStyle : normalStyle);
+      }
+    }
+    if (btnA) btnA.onclick = () => { currentGroup = 'A'; localStorage.setItem('currentButtonGroup', 'A'); setSwitchUI(); loadButtons(); };
+    if (btnB) btnB.onclick = () => { currentGroup = 'B'; localStorage.setItem('currentButtonGroup', 'B'); setSwitchUI(); loadButtons(); };
+
+    setSwitchUI();
     loadButtons();
   </script>
 </body>

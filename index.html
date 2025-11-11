@@ -467,6 +467,7 @@
                             localStorage.setItem('currentCommunityId', target.id || '');
                             localStorage.setItem('currentCommunityName', target.name || '社區名稱');
                             localStorage.setItem('currentCommunityPhotoUrl', target.photoUrl || '');
+                            localStorage.setItem('currentButtonGroup', 'A');
                         } catch (e) { /* 忽略 localStorage 例外 */ }
                     }
                     window.location.href = 'stage.html';
@@ -738,6 +739,7 @@
                         localStorage.setItem('currentCommunityId', community.id || '');
                         localStorage.setItem('currentCommunityName', community.name || '社區名稱');
                         localStorage.setItem('currentCommunityPhotoUrl', community.photoUrl || '');
+                        localStorage.setItem('currentButtonGroup', 'A');
                     } catch (e) { /* 忽略 localStorage 例外 */ }
                     window.location.href = 'stage.html';
                 });
